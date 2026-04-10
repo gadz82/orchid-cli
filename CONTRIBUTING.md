@@ -7,7 +7,10 @@ cd orchid-cli
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ../orchid -e ".[dev]"
+pre-commit install
 ```
+
+The last command installs git hooks that **automatically run ruff (lint + format) and gitlint (commit message check) before every commit**.
 
 ## Commit Message Convention
 
