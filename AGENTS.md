@@ -93,7 +93,7 @@ Chat ID prefix matching is supported (type first few chars of UUID).
 | Vector backend | `qdrant` | `VECTOR_BACKEND` |
 | Qdrant URL | `http://qdrant:6333` | `QDRANT_URL` |
 | Embedding model | `text-embedding-3-small` | `EMBEDDING_MODEL` |
-| Storage class | `orchid.persistence.sqlite.SQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
+| Storage class | `orchid_ai.persistence.sqlite.SQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
 
 ## Running
@@ -118,7 +118,7 @@ Requires Ollama running on host with models: `llama3.2`, `nomic-embed-text`.
 
 - Python 3.11+, Ruff, line length 120
 - `from __future__ import annotations` in every file
-- Imports: `from orchid.xxx` (never `from src.xxx`)
+- Imports: `from orchid_ai.xxx` (never `from src.xxx`)
 - All async operations use `asyncio.run()` or Typer's async support
 - No vendor-specific code — platform integrations belong in consumers
 
