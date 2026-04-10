@@ -12,8 +12,8 @@ import asyncio
 import typer
 from rich.console import Console
 
-from orchid.core.repository import VectorWriter
-from orchid.rag.indexer import StaticIndexer
+from orchid_ai.core.repository import VectorWriter
+from orchid_ai.rag.indexer import StaticIndexer
 
 
 app = typer.Typer(help="Vector store indexing", no_args_is_help=True)

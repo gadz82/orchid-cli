@@ -73,7 +73,7 @@ class TestSkillGenerate:
         config = _minimal_config(
             tools={
                 "my_tool": {
-                    "handler": "orchid.tools.math.calculate_completion_rate",
+                    "handler": "orchid_ai.tools.math.calculate_completion_rate",
                     "description": "Calculate completion rate",
                 },
             },
@@ -102,7 +102,7 @@ class TestSkillGenerate:
         config = _minimal_config(
             tools={
                 "calc_rate": {
-                    "handler": "orchid.tools.math.calculate_completion_rate",
+                    "handler": "orchid_ai.tools.math.calculate_completion_rate",
                     "description": "Calc rate",
                 },
             },
@@ -127,7 +127,7 @@ class TestSkillGenerate:
         config = _minimal_config(
             tools={
                 "calc_rate": {
-                    "handler": "orchid.tools.math.calculate_completion_rate",
+                    "handler": "orchid_ai.tools.math.calculate_completion_rate",
                     "description": "Calc rate",
                 },
             },
@@ -150,7 +150,7 @@ class TestSkillGenerate:
         config = _minimal_config(
             tools={
                 "calc_rate": {
-                    "handler": "orchid.tools.math.calculate_completion_rate",
+                    "handler": "orchid_ai.tools.math.calculate_completion_rate",
                     "description": "Calc rate",
                 },
             },
@@ -232,7 +232,7 @@ class TestSkillGenerate:
         """Agent-level skills appear as workflows in SKILL.md."""
         config = _minimal_config(
             tools={
-                "step_a": {"handler": "orchid.tools.math.calculate_completion_rate", "description": "Step A"},
+                "step_a": {"handler": "orchid_ai.tools.math.calculate_completion_rate", "description": "Step A"},
             },
         )
         config["agents"]["helper"]["tools"] = ["step_a"]
@@ -276,8 +276,8 @@ class TestSkillGenerate:
         """Tools from the same module share one script file."""
         config = _minimal_config(
             tools={
-                "tool_a": {"handler": "orchid.tools.math.calculate_completion_rate", "description": "A"},
-                "tool_b": {"handler": "orchid.tools.dates.format_date", "description": "B"},
+                "tool_a": {"handler": "orchid_ai.tools.math.calculate_completion_rate", "description": "A"},
+                "tool_b": {"handler": "orchid_ai.tools.dates.format_date", "description": "B"},
             },
         )
         config["agents"]["helper"]["tools"] = ["tool_a", "tool_b"]

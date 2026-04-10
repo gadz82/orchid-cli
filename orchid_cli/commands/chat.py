@@ -22,7 +22,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from rich.console import Console
 from rich.table import Table
 
-from orchid.core.state import AuthContext
+from orchid_ai.core.state import AuthContext
 
 from ..bootstrap import cli_context
 

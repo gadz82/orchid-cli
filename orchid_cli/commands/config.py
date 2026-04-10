@@ -10,7 +10,7 @@ from __future__ import annotations
 import typer
 from rich.console import Console
 
-from orchid.config.loader import load_config
+from orchid_ai.config.loader import load_config
 
 app = typer.Typer(help="Configuration management", no_args_is_help=True)
 console = Console()
