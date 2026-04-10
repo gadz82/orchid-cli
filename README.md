@@ -11,7 +11,7 @@ Provides terminal access to all chat operations, configuration validation, RAG i
 ## Installation
 
 ```bash
-pip install orchid orchid-cli
+pip install orchid-ai orchid-cli
 ```
 
 The `orchid` command is available after installation.
