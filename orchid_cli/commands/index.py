@@ -15,7 +15,6 @@ from rich.console import Console
 from orchid.core.repository import VectorWriter
 from orchid.rag.indexer import StaticIndexer
 
-from ..bootstrap import bootstrap
 
 app = typer.Typer(help="Vector store indexing", no_args_is_help=True)
 console = Console()

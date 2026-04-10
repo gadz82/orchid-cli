@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import json
 import shutil
 from pathlib import Path
 
@@ -255,8 +254,8 @@ def _build_orchestrator_skill_md(
 
     parts.append(f"# {skill_name.replace('_', ' ').title()}\n")
     parts.append(
-        f"> Auto-generated from Orchid orchestrator skill. "
-        f"This is a multi-agent workflow that coordinates several specialists.\n"
+        "> Auto-generated from Orchid orchestrator skill. "
+        "This is a multi-agent workflow that coordinates several specialists.\n"
     )
 
     if skill_cfg.description:
@@ -348,7 +347,6 @@ def _generate_tool_scripts(
         script_name = f"{module_short_name}.py"
 
         # Build the __main__ CLI wrapper
-        func_names = [tool_cfg.handler.rsplit(".", 1)[1] for _, tool_cfg in tools_in_module]
         cli_wrapper = _build_cli_wrapper(tools_in_module)
 
         # Strip __future__ annotations from source if present (we re-add it)
