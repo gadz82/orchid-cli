@@ -25,34 +25,34 @@ logger = logging.getLogger(__name__)
 
 # ── YAML key → env var mapping (same as orchid-api/settings.py) ──────
 _YAML_TO_ENV: dict[tuple[str, str], str] = {
-    ("agents", "config_path"):          "AGENTS_CONFIG_PATH",
-    ("llm", "model"):                   "LITELLM_MODEL",
-    ("llm", "ollama_api_base"):         "OLLAMA_API_BASE",
-    ("llm", "groq_api_key"):            "GROQ_API_KEY",
-    ("llm", "gemini_api_key"):          "GEMINI_API_KEY",
-    ("llm", "anthropic_api_key"):       "ANTHROPIC_API_KEY",
-    ("llm", "openai_api_key"):          "OPENAI_API_KEY",
-    ("auth", "dev_bypass"):             "DEV_AUTH_BYPASS",
+    ("agents", "config_path"): "AGENTS_CONFIG_PATH",
+    ("llm", "model"): "LITELLM_MODEL",
+    ("llm", "ollama_api_base"): "OLLAMA_API_BASE",
+    ("llm", "groq_api_key"): "GROQ_API_KEY",
+    ("llm", "gemini_api_key"): "GEMINI_API_KEY",
+    ("llm", "anthropic_api_key"): "ANTHROPIC_API_KEY",
+    ("llm", "openai_api_key"): "OPENAI_API_KEY",
+    ("auth", "dev_bypass"): "DEV_AUTH_BYPASS",
     ("auth", "identity_resolver_class"): "IDENTITY_RESOLVER_CLASS",
-    ("auth", "domain"):                 "AUTH_DOMAIN",
-    ("startup", "hook"):                "STARTUP_HOOK",
-    ("rag", "vector_backend"):          "VECTOR_BACKEND",
-    ("rag", "qdrant_url"):              "QDRANT_URL",
-    ("rag", "embedding_model"):         "EMBEDDING_MODEL",
-    ("rag", "openai_api_key"):          "OPENAI_API_KEY",
-    ("rag", "gemini_api_key"):          "GEMINI_API_KEY",
-    ("upload", "vision_model"):         "VISION_MODEL",
-    ("upload", "namespace"):            "UPLOAD_NAMESPACE",
-    ("upload", "max_size_mb"):          "UPLOAD_MAX_SIZE_MB",
-    ("upload", "chunk_size"):           "CHUNK_SIZE",
-    ("upload", "chunk_overlap"):        "CHUNK_OVERLAP",
-    ("storage", "class"):               "CHAT_STORAGE_CLASS",
-    ("storage", "dsn"):                 "CHAT_DB_DSN",
-    ("mcp", "catalog_url"):             "MCP_CATALOG_URL",
-    ("mcp", "notifications_url"):       "MCP_NOTIFICATIONS_URL",
-    ("tracing", "langsmith_tracing"):   "LANGSMITH_TRACING",
-    ("tracing", "langsmith_api_key"):   "LANGSMITH_API_KEY",
-    ("tracing", "langsmith_project"):   "LANGSMITH_PROJECT",
+    ("auth", "domain"): "AUTH_DOMAIN",
+    ("startup", "hook"): "STARTUP_HOOK",
+    ("rag", "vector_backend"): "VECTOR_BACKEND",
+    ("rag", "qdrant_url"): "QDRANT_URL",
+    ("rag", "embedding_model"): "EMBEDDING_MODEL",
+    ("rag", "openai_api_key"): "OPENAI_API_KEY",
+    ("rag", "gemini_api_key"): "GEMINI_API_KEY",
+    ("upload", "vision_model"): "VISION_MODEL",
+    ("upload", "namespace"): "UPLOAD_NAMESPACE",
+    ("upload", "max_size_mb"): "UPLOAD_MAX_SIZE_MB",
+    ("upload", "chunk_size"): "CHUNK_SIZE",
+    ("upload", "chunk_overlap"): "CHUNK_OVERLAP",
+    ("storage", "class"): "CHAT_STORAGE_CLASS",
+    ("storage", "dsn"): "CHAT_DB_DSN",
+    ("mcp", "catalog_url"): "MCP_CATALOG_URL",
+    ("mcp", "notifications_url"): "MCP_NOTIFICATIONS_URL",
+    ("tracing", "langsmith_tracing"): "LANGSMITH_TRACING",
+    ("tracing", "langsmith_api_key"): "LANGSMITH_API_KEY",
+    ("tracing", "langsmith_project"): "LANGSMITH_PROJECT",
 }
 
 
@@ -147,16 +147,8 @@ async def bootstrap(
             await reader.ensure_collections([*namespaces, "uploads"])
 
     # Chat persistence — always initialized, defaults to SQLite
-    resolved_storage_class = (
-        chat_storage_class
-        or os.environ.get("CHAT_STORAGE_CLASS", "")
-        or DEFAULT_STORAGE_CLASS
-    )
-    resolved_dsn = (
-        chat_db_dsn
-        or os.environ.get("CHAT_DB_DSN", "")
-        or DEFAULT_STORAGE_DSN
-    )
+    resolved_storage_class = chat_storage_class or os.environ.get("CHAT_STORAGE_CLASS", "") or DEFAULT_STORAGE_CLASS
+    resolved_dsn = chat_db_dsn or os.environ.get("CHAT_DB_DSN", "") or DEFAULT_STORAGE_DSN
     chat_repo = build_chat_storage(class_path=resolved_storage_class, dsn=resolved_dsn)
     await chat_repo.init_db()
 

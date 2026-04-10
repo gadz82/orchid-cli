@@ -35,7 +35,9 @@ console = Console()
 def generate(
     config_path: str = typer.Argument(..., help="Path to agents.yaml config file"),
     output: str = typer.Option(".claude/skills", "-o", "--output", help="Output directory for generated skills"),
-    include: str | None = typer.Option(None, "--include", help="Comma-separated agent/skill names to include (default: all)"),
+    include: str | None = typer.Option(
+        None, "--include", help="Comma-separated agent/skill names to include (default: all)"
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing skill directories"),
     zip_archive: bool = typer.Option(False, "--zip", help="Create a zip archive of the generated skills"),
 ) -> None:
@@ -133,7 +135,7 @@ def _build_agent_skill_md(
         f'description: "{_truncate(description, 240)}"',
     ]
     if allowed:
-        frontmatter_lines.append(f"allowed-tools: \"{' '.join(allowed)}\"")
+        frontmatter_lines.append(f'allowed-tools: "{" ".join(allowed)}"')
     frontmatter_lines.append("---")
     parts.append("\n".join(frontmatter_lines) + "\n")
 
@@ -152,8 +154,7 @@ def _build_agent_skill_md(
     if tool_scripts:
         parts.append("## Available Tools\n")
         parts.append(
-            "This skill includes executable Python scripts for each built-in tool. "
-            "Run them to get real results.\n"
+            "This skill includes executable Python scripts for each built-in tool. Run them to get real results.\n"
         )
         for tool_name, info in tool_scripts.items():
             tool_cfg = config.tools.get(tool_name)
@@ -245,12 +246,7 @@ def _build_orchestrator_skill_md(
     parts: list[str] = []
 
     description = _clean_description(skill_cfg.description)
-    parts.append(
-        f"---\n"
-        f"name: {skill_name.replace('_', '-')}\n"
-        f'description: "{_truncate(description, 240)}"\n'
-        f"---\n"
-    )
+    parts.append(f'---\nname: {skill_name.replace("_", "-")}\ndescription: "{_truncate(description, 240)}"\n---\n')
 
     parts.append(f"# {skill_name.replace('_', ' ').title()}\n")
     parts.append(
@@ -264,9 +260,7 @@ def _build_orchestrator_skill_md(
 
     # ── Workflow steps ──
     parts.append("## Workflow Steps\n")
-    parts.append(
-        "Execute these steps in order. Each step's output feeds into the next.\n"
-    )
+    parts.append("Execute these steps in order. Each step's output feeds into the next.\n")
     for i, step in enumerate(skill_cfg.steps, 1):
         agent_cfg = config.agents.get(step.agent)
         agent_desc = _clean_description(agent_cfg.description) if agent_cfg else ""
