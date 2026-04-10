@@ -16,8 +16,8 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from orchid.config.loader import load_config
-from orchid.config.schema import (
+from orchid_ai.config.loader import load_config
+from orchid_ai.config.schema import (
     AgentConfig,
     AgentsConfig,
     BuiltinToolConfig,

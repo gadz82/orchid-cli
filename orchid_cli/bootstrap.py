@@ -13,13 +13,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from orchid.config.loader import load_config
-from orchid.config.schema import AgentsConfig
-from orchid.core.repository import VectorReader, VectorStoreAdmin
-from orchid.graph.graph import build_graph
-from orchid.persistence.base import ChatStorage
-from orchid.persistence.factory import build_chat_storage
-from orchid.rag.factory import build_reader
+from orchid_ai.config.loader import load_config
+from orchid_ai.config.schema import AgentsConfig
+from orchid_ai.core.repository import VectorReader, VectorStoreAdmin
+from orchid_ai.graph.graph import build_graph
+from orchid_ai.persistence.base import ChatStorage
+from orchid_ai.persistence.factory import build_chat_storage
+from orchid_ai.rag.factory import build_reader
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def _apply_yaml_to_env(config_path: str) -> None:
 
 
 # Defaults — SQLite storage ships with orchid, no external DB needed
-DEFAULT_STORAGE_CLASS = "orchid.persistence.sqlite.SQLiteChatStorage"
+DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.SQLiteChatStorage"
 DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
 
 
