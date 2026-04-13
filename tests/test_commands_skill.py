@@ -74,7 +74,7 @@ class TestSkillGenerate:
         config = _minimal_config(
             tools={
                 "my_tool": {
-                    "handler": "orchid_ai.tools.math.calculate_completion_rate",
+                    "handler": "tests.fixtures.fake_tools_math.calculate_completion_rate",
                     "description": "Calculate completion rate",
                 },
             },
@@ -103,7 +103,7 @@ class TestSkillGenerate:
         config = _minimal_config(
             tools={
                 "calc_rate": {
-                    "handler": "orchid_ai.tools.math.calculate_completion_rate",
+                    "handler": "tests.fixtures.fake_tools_math.calculate_completion_rate",
                     "description": "Calc rate",
                 },
             },
@@ -113,7 +113,7 @@ class TestSkillGenerate:
         out = str(tmp_path / "skills")
         runner.invoke(app, ["skill", "generate", cfg_path, "-o", out])
         os.unlink(cfg_path)
-        script = tmp_path / "skills" / "helper" / "scripts" / "math.py"
+        script = tmp_path / "skills" / "helper" / "scripts" / "fake_tools_math.py"
         assert script.exists()
         # Run the script
         result = subprocess.run(
@@ -129,7 +129,7 @@ class TestSkillGenerate:
         config = _minimal_config(
             tools={
                 "calc_rate": {
-                    "handler": "orchid_ai.tools.math.calculate_completion_rate",
+                    "handler": "tests.fixtures.fake_tools_math.calculate_completion_rate",
                     "description": "Calc rate",
                 },
             },
@@ -139,7 +139,7 @@ class TestSkillGenerate:
         out = str(tmp_path / "skills")
         runner.invoke(app, ["skill", "generate", cfg_path, "-o", out])
         os.unlink(cfg_path)
-        script = tmp_path / "skills" / "helper" / "scripts" / "math.py"
+        script = tmp_path / "skills" / "helper" / "scripts" / "fake_tools_math.py"
         result = subprocess.run(
             [sys.executable, str(script), "--help"],
             capture_output=True,
@@ -153,7 +153,7 @@ class TestSkillGenerate:
         config = _minimal_config(
             tools={
                 "calc_rate": {
-                    "handler": "orchid_ai.tools.math.calculate_completion_rate",
+                    "handler": "tests.fixtures.fake_tools_math.calculate_completion_rate",
                     "description": "Calc rate",
                 },
             },
@@ -164,7 +164,7 @@ class TestSkillGenerate:
         runner.invoke(app, ["skill", "generate", cfg_path, "-o", out])
         os.unlink(cfg_path)
         content = (tmp_path / "skills" / "helper" / "SKILL.md").read_text()
-        assert "scripts/math.py" in content
+        assert "scripts/fake_tools_math.py" in content
         assert "CLAUDE_SKILL_DIR" in content
         assert "allowed-tools" in content
 
@@ -235,7 +235,7 @@ class TestSkillGenerate:
         """Agent-level skills appear as workflows in SKILL.md."""
         config = _minimal_config(
             tools={
-                "step_a": {"handler": "orchid_ai.tools.math.calculate_completion_rate", "description": "Step A"},
+                "step_a": {"handler": "tests.fixtures.fake_tools_math.calculate_completion_rate", "description": "Step A"},
             },
         )
         config["agents"]["helper"]["tools"] = ["step_a"]
@@ -255,7 +255,7 @@ class TestSkillGenerate:
         assert "my_workflow" in content
         assert "A two-step workflow" in content
         # Workflow steps should reference scripts
-        assert "scripts/math.py" in content
+        assert "scripts/fake_tools_math.py" in content
 
     def test_mcp_servers_noted(self, tmp_path):
         """MCP servers are documented as non-portable integrations."""
@@ -279,8 +279,8 @@ class TestSkillGenerate:
         """Tools from the same module share one script file."""
         config = _minimal_config(
             tools={
-                "tool_a": {"handler": "orchid_ai.tools.math.calculate_completion_rate", "description": "A"},
-                "tool_b": {"handler": "orchid_ai.tools.dates.format_date", "description": "B"},
+                "tool_a": {"handler": "tests.fixtures.fake_tools_math.calculate_completion_rate", "description": "A"},
+                "tool_b": {"handler": "tests.fixtures.fake_tools_dates.format_date", "description": "B"},
             },
         )
         config["agents"]["helper"]["tools"] = ["tool_a", "tool_b"]
@@ -290,8 +290,8 @@ class TestSkillGenerate:
         os.unlink(cfg_path)
         scripts_dir = tmp_path / "skills" / "helper" / "scripts"
         # Two different modules -> two script files
-        assert (scripts_dir / "math.py").exists()
-        assert (scripts_dir / "dates.py").exists()
+        assert (scripts_dir / "fake_tools_math.py").exists()
+        assert (scripts_dir / "fake_tools_dates.py").exists()
 
     def test_generates_zip_archive(self, tmp_path):
         """--zip flag creates a zip archive of all generated skills."""
