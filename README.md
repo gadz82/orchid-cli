@@ -4,7 +4,7 @@
 
 <h1 align="center">Orchid CLI</h1>
 
-Command-line interface for the [Orchid](../orchid) multi-agent AI framework.
+Command-line interface for the [Orchid](https://github.com/gadz82/orchid) multi-agent AI framework.
 
 Provides terminal access to all chat operations, configuration validation, RAG indexing, and Claude Code skill generation. Mirrors the full functionality of [orchid-api](../orchid-api) but runs locally with no server, Docker, or external database required (defaults to SQLite).
 
