@@ -1,4 +1,5 @@
 """Tests for orchid_cli.commands.skill — Claude Code skill generation."""
+
 from __future__ import annotations
 
 import os
@@ -117,7 +118,8 @@ class TestSkillGenerate:
         # Run the script
         result = subprocess.run(
             [sys.executable, str(script), "calculate_completion_rate", "--enrolled", "100", "--completed", "75"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert result.returncode == 0
         assert "75.0" in result.stdout
@@ -140,7 +142,8 @@ class TestSkillGenerate:
         script = tmp_path / "skills" / "helper" / "scripts" / "math.py"
         result = subprocess.run(
             [sys.executable, str(script), "--help"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert result.returncode == 0
         assert "calculate_completion_rate" in result.stdout
@@ -300,3 +303,102 @@ class TestSkillGenerate:
         zip_file = tmp_path / "skills.zip"
         assert zip_file.exists()
         assert zip_file.stat().st_size > 0
+
+    def test_global_guardrails_in_agent_skill(self, tmp_path):
+        """Global guardrails appear in agent SKILL.md."""
+        config = _minimal_config()
+        config["guardrails"] = {
+            "input": [
+                {"type": "prompt_injection", "fail_action": "block"},
+                {"type": "max_length", "fail_action": "block", "config": {"max_characters": 5000}},
+            ],
+            "output": [
+                {"type": "pii_detection", "fail_action": "redact", "config": {"entities": ["email", "phone"]}},
+            ],
+        }
+        cfg_path = _write_config(config)
+        out = str(tmp_path / "skills")
+        runner.invoke(app, ["skill", "generate", cfg_path, "-o", out])
+        os.unlink(cfg_path)
+        content = (tmp_path / "skills" / "helper" / "SKILL.md").read_text()
+        assert "## Guardrails" in content
+        assert "### Input Rules" in content
+        assert "### Output Rules" in content
+        assert "prompt_injection" in content
+        assert "max_length" in content
+        assert "Max characters: 5000" in content
+        assert "pii_detection" in content
+        assert "Entities: email, phone" in content
+
+    def test_per_agent_guardrails_in_skill(self, tmp_path):
+        """Per-agent guardrails appear in agent SKILL.md."""
+        config = _minimal_config()
+        config["agents"]["helper"]["guardrails"] = {
+            "input": [
+                {
+                    "type": "topic_restriction",
+                    "fail_action": "warn",
+                    "config": {"allowed_topics": ["cooking", "recipes"]},
+                },
+            ],
+        }
+        cfg_path = _write_config(config)
+        out = str(tmp_path / "skills")
+        runner.invoke(app, ["skill", "generate", cfg_path, "-o", out])
+        os.unlink(cfg_path)
+        content = (tmp_path / "skills" / "helper" / "SKILL.md").read_text()
+        assert "## Guardrails" in content
+        assert "topic_restriction" in content
+        assert "Allowed topics: cooking, recipes" in content
+
+    def test_combined_global_and_agent_guardrails(self, tmp_path):
+        """Global + per-agent guardrails are merged in SKILL.md."""
+        config = _minimal_config()
+        config["guardrails"] = {
+            "input": [{"type": "prompt_injection", "fail_action": "block"}],
+        }
+        config["agents"]["helper"]["guardrails"] = {
+            "input": [
+                {"type": "topic_restriction", "fail_action": "warn", "config": {"allowed_topics": ["sports"]}},
+            ],
+        }
+        cfg_path = _write_config(config)
+        out = str(tmp_path / "skills")
+        runner.invoke(app, ["skill", "generate", cfg_path, "-o", out])
+        os.unlink(cfg_path)
+        content = (tmp_path / "skills" / "helper" / "SKILL.md").read_text()
+        # Both global and per-agent guardrails should be present
+        assert "prompt_injection" in content
+        assert "topic_restriction" in content
+
+    def test_no_guardrails_section_when_none(self, tmp_path):
+        """No ## Guardrails section when no guardrails configured."""
+        cfg_path = _write_config(_minimal_config())
+        out = str(tmp_path / "skills")
+        runner.invoke(app, ["skill", "generate", cfg_path, "-o", out])
+        os.unlink(cfg_path)
+        content = (tmp_path / "skills" / "helper" / "SKILL.md").read_text()
+        assert "## Guardrails" not in content
+
+    def test_global_guardrails_in_orchestrator_skill(self, tmp_path):
+        """Global guardrails appear in orchestrator SKILL.md."""
+        config = _minimal_config(
+            skills={
+                "workflow": {
+                    "description": "A workflow",
+                    "steps": [{"agent": "helper", "instruction": "Do it"}],
+                },
+            },
+        )
+        config["guardrails"] = {
+            "input": [{"type": "content_safety", "fail_action": "block"}],
+            "output": [{"type": "pii_detection", "fail_action": "redact"}],
+        }
+        cfg_path = _write_config(config)
+        out = str(tmp_path / "skills")
+        runner.invoke(app, ["skill", "generate", cfg_path, "-o", out])
+        os.unlink(cfg_path)
+        content = (tmp_path / "skills" / "workflow" / "SKILL.md").read_text()
+        assert "## Guardrails" in content
+        assert "content_safety" in content
+        assert "pii_detection" in content

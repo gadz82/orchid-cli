@@ -138,6 +138,7 @@ orchid skill generate path/to/agents.yaml --zip
 | Orchestrator skills | Multi-agent workflow skill |
 | MCP servers | Noted as runtime-only (not portable) |
 | RAG context | Noted as runtime-only (not portable) |
+| Guardrails (global + per-agent) | Input/output rules section with actions and config |
 
 Each agent skill includes a `scripts/` folder with standalone Python scripts that Claude Code can execute directly. Tools from the same source module are grouped into a single script file with a CLI wrapper that accepts `--arg value` arguments.
 
