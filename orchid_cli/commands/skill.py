@@ -26,12 +26,9 @@ from orchid_ai.config.schema import (
     OrchestratorSkillConfig,
 )
 from orchid_ai.config.tool_registry import (
-    BuiltinToolEntry,
-    ToolParameter,
     load_tools_from_config,
     get_tool,
     list_tools,
-    clear as clear_registry,
 )
 
 app = typer.Typer(help="Generate Claude Code skills from Orchid config", no_args_is_help=True)
