@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.0.4 (2026-04-14)
+
+### Bug Fixes
+
+- **auth**: Improve token expiration messaging and log formatting
+  ([`7ef8e5b`](https://github.com/gadz82/orchid-cli/commit/7ef8e5b4bd33ade45b8ac07634c7b84e02808a5b))
+
+- **auth**: Integrate OAuth 2.0 PKCE flow and token storage into CLI auth commands
+  ([`e2df0b8`](https://github.com/gadz82/orchid-cli/commit/e2df0b8b261350382b94c8359abadab0007fdc6c))
+
+
 ## v1.0.3 (2026-04-14)
 
 ### Bug Fixes
