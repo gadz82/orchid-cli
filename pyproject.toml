@@ -1,6 +1,6 @@
 [project]
 name = "orchid-cli"
-version = "1.0.2"
+version = "1.0.3"
 description = "Orchid CLI — command-line interface for the Orchid agent framework"
 readme = "README.md"
 license = "MIT"
