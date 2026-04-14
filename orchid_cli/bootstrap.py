@@ -20,6 +20,7 @@ from orchid_ai.graph.graph import build_graph
 from orchid_ai.persistence.base import ChatStorage
 from orchid_ai.persistence.factory import build_chat_storage
 from orchid_ai.rag.factory import build_reader
+from orchid_ai.runtime import OrchidRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -153,10 +154,13 @@ async def bootstrap(
     await chat_repo.init_db()
 
     # Build graph
-    graph = build_graph(
-        config=agents_config,
+    runtime = OrchidRuntime(
         default_model=resolved_model,
         reader=reader,
+    )
+    graph = build_graph(
+        config=agents_config,
+        runtime=runtime,
     )
 
     logger.info(

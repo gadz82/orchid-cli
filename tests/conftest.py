@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from orchid_ai.core.state import AuthContext
 from orchid_ai.persistence.models import ChatMessage, ChatSession
 from orchid_cli.bootstrap import OrchidContext
 

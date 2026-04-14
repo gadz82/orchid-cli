@@ -36,7 +36,7 @@ keywords = [
     "orchestration",
 ]
 dependencies = [
-    "orchid-ai>=1.2.11",
+    "orchid-ai>=1.2.13",
     "typer>=0.12.0",
     "rich>=13.0",
     "pyyaml>=6.0",
