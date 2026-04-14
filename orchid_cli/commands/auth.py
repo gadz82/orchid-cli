@@ -119,7 +119,9 @@ def status(
         if token.is_refresh_available:
             console.print("[yellow]Token expired[/yellow] (will auto-refresh on next command).")
         else:
-            console.print("[red]Token expired.[/red] Run [bold]orchid auth login -c <config>[/bold] to re-authenticate.")
+            console.print(
+                "[red]Token expired.[/red] Run [bold]orchid auth login -c <config>[/bold] to re-authenticate."
+            )
             return
     else:
         console.print("[bold green]Authenticated[/bold green]")

@@ -52,9 +52,7 @@ async def get_auth_context(
 
     token = load_token(cfg.client_id)
     if token is None:
-        logger.warning(
-            "[CLI Auth] No stored token. Run 'orchid auth login' first. Falling back to dev auth."
-        )
+        logger.warning("[CLI Auth] No stored token. Run 'orchid auth login' first. Falling back to dev auth.")
         return _DEV_AUTH
 
     # Refresh if expired.
