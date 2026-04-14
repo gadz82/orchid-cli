@@ -24,17 +24,11 @@ from rich.table import Table
 
 from orchid_ai.core.state import AuthContext
 
+from ..auth.middleware import get_auth_context
 from ..bootstrap import cli_context
 
 app = typer.Typer(help="Chat management and messaging", no_args_is_help=True)
 console = Console()
-
-# CLI uses a fixed auth context — no OAuth needed
-_CLI_AUTH = AuthContext(
-    access_token="cli-token",
-    tenant_key="cli",
-    user_id="cli-user",
-)
 
 
 # ── Chat CRUD ───────────────────────────────────────────────
@@ -51,10 +45,11 @@ def create(
 
 
 async def _create(title: str, config_path: str, model: str) -> None:
+    auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
         session = await ctx.chat_repo.create_chat(
-            tenant_id=_CLI_AUTH.tenant_key,
-            user_id=_CLI_AUTH.user_id,
+            tenant_id=auth.tenant_key,
+            user_id=auth.user_id,
             title=title,
         )
         console.print(f"[bold green]Created:[/bold green] {session.id}")
@@ -72,10 +67,11 @@ def list_chats(
 
 
 async def _list_chats(config_path: str, model: str) -> None:
+    auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
         sessions = await ctx.chat_repo.list_chats(
-            tenant_id=_CLI_AUTH.tenant_key,
-            user_id=_CLI_AUTH.user_id,
+            tenant_id=auth.tenant_key,
+            user_id=auth.user_id,
         )
 
         if not sessions:
@@ -114,8 +110,9 @@ def delete(
 
 
 async def _delete(chat_id: str, config_path: str, model: str, force: bool) -> None:
+    auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
-        resolved_id = await _resolve_chat_id(ctx, chat_id)
+        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
@@ -142,8 +139,9 @@ def history(
 
 
 async def _history(chat_id: str, limit: int, config_path: str, model: str) -> None:
+    auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
-        resolved_id = await _resolve_chat_id(ctx, chat_id)
+        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
@@ -181,8 +179,9 @@ def rename(
 
 
 async def _rename(chat_id: str, title: str, config_path: str, model: str) -> None:
+    auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
-        resolved_id = await _resolve_chat_id(ctx, chat_id)
+        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
@@ -201,8 +200,9 @@ def share(
 
 
 async def _share(chat_id: str, config_path: str, model: str) -> None:
+    auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
-        resolved_id = await _resolve_chat_id(ctx, chat_id)
+        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
@@ -225,12 +225,13 @@ def send(
 
 
 async def _send(chat_id: str, message: str, config_path: str, model: str) -> None:
+    auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
-        resolved_id = await _resolve_chat_id(ctx, chat_id)
+        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
-        response_text, agents_used = await _send_message(ctx, resolved_id, message)
+        response_text, agents_used = await _send_message(ctx, resolved_id, message, auth)
 
         console.print()
         console.print(response_text)
@@ -249,18 +250,19 @@ def interactive(
 
 
 async def _interactive(chat_id: str | None, config_path: str, model: str) -> None:
+    auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
         # Resolve or create a chat
         if chat_id:
-            resolved_id = await _resolve_chat_id(ctx, chat_id)
+            resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
             if not resolved_id:
                 return
             chat = await ctx.chat_repo.get_chat(resolved_id)
             console.print(f"[bold]Resuming:[/bold] {chat.title} ({resolved_id[:12]}…)")
         else:
             chat = await ctx.chat_repo.create_chat(
-                tenant_id=_CLI_AUTH.tenant_key,
-                user_id=_CLI_AUTH.user_id,
+                tenant_id=auth.tenant_key,
+                user_id=auth.user_id,
                 title="Interactive session",
             )
             resolved_id = chat.id
@@ -294,8 +296,8 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
 
                 elif cmd == "/list":
                     sessions = await ctx.chat_repo.list_chats(
-                        tenant_id=_CLI_AUTH.tenant_key,
-                        user_id=_CLI_AUTH.user_id,
+                        tenant_id=auth.tenant_key,
+                        user_id=auth.user_id,
                     )
                     if not sessions:
                         console.print("[dim]No chats.[/dim]")
@@ -310,7 +312,7 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
                     if not arg:
                         console.print("[red]Usage: /switch <chat_id>[/red]")
                         continue
-                    new_id = await _resolve_chat_id(ctx, arg)
+                    new_id = await _resolve_chat_id(ctx, arg, auth)
                     if new_id:
                         current_chat_id = new_id
                         chat = await ctx.chat_repo.get_chat(current_chat_id)
@@ -320,8 +322,8 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
                 elif cmd == "/new":
                     title = arg or "Interactive session"
                     new_chat = await ctx.chat_repo.create_chat(
-                        tenant_id=_CLI_AUTH.tenant_key,
-                        user_id=_CLI_AUTH.user_id,
+                        tenant_id=auth.tenant_key,
+                        user_id=auth.user_id,
                         title=title,
                     )
                     current_chat_id = new_chat.id
@@ -354,7 +356,7 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
                     continue
 
             # Send message
-            response_text, agents_used = await _send_message(ctx, current_chat_id, stripped)
+            response_text, agents_used = await _send_message(ctx, current_chat_id, stripped, auth)
             console.print(f"\n[bold green]Assistant:[/bold green] {response_text}")
             if agents_used:
                 console.print(f"  [dim]Agents: {', '.join(agents_used)}[/dim]")
@@ -366,7 +368,7 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
 # ── Helpers ─────────────────────────────────────────────────
 
 
-async def _send_message(ctx, chat_id: str, message: str) -> tuple[str, list[str]]:
+async def _send_message(ctx, chat_id: str, message: str, auth: AuthContext) -> tuple[str, list[str]]:
     """Send a message through the graph, persist to storage, return (response, agents_used)."""
     # Load history
     history_rows = await ctx.chat_repo.get_messages(chat_id, limit=50)
@@ -379,7 +381,7 @@ async def _send_message(ctx, chat_id: str, message: str) -> tuple[str, list[str]
 
     initial_state = {
         "messages": history_messages + [HumanMessage(content=message)],
-        "auth_context": _CLI_AUTH,
+        "auth_context": auth,
         "chat_id": chat_id,
     }
 
@@ -402,17 +404,17 @@ async def _send_message(ctx, chat_id: str, message: str) -> tuple[str, list[str]
     return response_text, agents_used
 
 
-async def _resolve_chat_id(ctx, chat_id_prefix: str) -> str | None:
+async def _resolve_chat_id(ctx, chat_id_prefix: str, auth: AuthContext) -> str | None:
     """Resolve a chat ID prefix to a full ID. Prints error if not found."""
     # Try exact match first
     chat = await ctx.chat_repo.get_chat(chat_id_prefix)
-    if chat and chat.user_id == _CLI_AUTH.user_id:
+    if chat and chat.user_id == auth.user_id:
         return chat.id
 
     # Try prefix match
     sessions = await ctx.chat_repo.list_chats(
-        tenant_id=_CLI_AUTH.tenant_key,
-        user_id=_CLI_AUTH.user_id,
+        tenant_id=auth.tenant_key,
+        user_id=auth.user_id,
     )
     matches = [s for s in sessions if s.id.startswith(chat_id_prefix)]
 

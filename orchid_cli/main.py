@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import typer
 
-from .commands import chat, config, index, skill
+from .commands import auth, chat, config, index, skill
 
 app = typer.Typer(
     name="orchid",
@@ -20,6 +20,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+app.add_typer(auth.app, name="auth")
 app.add_typer(chat.app, name="chat")
 app.add_typer(config.app, name="config")
 app.add_typer(index.app, name="index")
