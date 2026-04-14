@@ -25,6 +25,14 @@ from orchid_ai.config.schema import (
     GuardrailsConfig,
     OrchestratorSkillConfig,
 )
+from orchid_ai.config.tool_registry import (
+    BuiltinToolEntry,
+    ToolParameter,
+    load_tools_from_config,
+    get_tool,
+    list_tools,
+    clear as clear_registry,
+)
 
 app = typer.Typer(help="Generate Claude Code skills from Orchid config", no_args_is_help=True)
 console = Console()
@@ -323,6 +331,11 @@ def _generate_tool_scripts(
 
     Groups tools from the same source module into a single script file.
     Returns a mapping of tool_name -> _ToolScriptInfo.
+
+    Parameter metadata is sourced from the tool registry (which merges
+    YAML-declared parameters with auto-extracted function signatures).
+    Falls back to ``inspect``-based extraction when registry data is
+    unavailable.
     """
     tool_names = agent_cfg.tools
     if not tool_names:
@@ -330,6 +343,9 @@ def _generate_tool_scripts(
 
     scripts_dir = skill_dir / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Ensure tools are registered so we can access their parameters
+    _ensure_tools_registered(config)
 
     # Group tools by source module path
     module_tools: dict[str, list[tuple[str, BuiltinToolConfig]]] = {}
@@ -370,7 +386,7 @@ def _generate_tool_scripts(
         # Build info for each tool in this module
         for tool_name, tool_cfg in tools_in_module:
             func_name = tool_cfg.handler.rsplit(".", 1)[1]
-            params = _extract_parameters(module_path, func_name)
+            params = _get_tool_parameters(tool_name, module_path, func_name)
             usage_hint = _build_usage_hint(func_name, params)
             result[tool_name] = _ToolScriptInfo(
                 script_name=script_name,
@@ -379,6 +395,31 @@ def _generate_tool_scripts(
             )
 
     return result
+
+
+def _ensure_tools_registered(config: AgentsConfig) -> None:
+    """Ensure all built-in tools are loaded into the registry."""
+    if config.tools and not list_tools():
+        try:
+            load_tools_from_config(config.tools)
+        except Exception:
+            pass  # fall back to inspect-based extraction
+
+
+def _get_tool_parameters(tool_name: str, module_path: str, func_name: str) -> dict[str, str]:
+    """Get tool parameters from the registry, falling back to inspect.
+
+    Returns a dict of param_name → description (the format expected by
+    ``_ToolScriptInfo``).
+    """
+    try:
+        entry = get_tool(tool_name)
+        if entry.parameters:
+            return {name: p.description or p.type for name, p in entry.parameters.items()}
+    except KeyError:
+        pass
+    # Fallback to inspect-based extraction
+    return _extract_parameters(module_path, func_name)
 
 
 def _read_module_source(module_path: str) -> str | None:
