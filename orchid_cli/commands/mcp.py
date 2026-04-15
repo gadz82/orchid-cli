@@ -74,7 +74,6 @@ def _find_free_port(start: int = 9876, attempts: int = 20) -> int:
 
 def _load_registry(config_path: str) -> MCPAuthRegistry:
     """Load agents config and build the auth registry."""
-    import os
     import yaml
 
     agents_config_path = "agents.yaml"
@@ -120,7 +119,6 @@ async def _auto_authorize_servers(
     opens the browser for the PKCE flow.  Returns list of server names
     that were successfully authorized.
     """
-    from orchid_ai.core.state import AuthContext
 
     authorized: list[str] = []
 
@@ -167,8 +165,7 @@ async def _auto_authorize_servers(
                 self.send_header("Content-Type", "text/html")
                 self.end_headers()
                 self.wfile.write(
-                    b"<html><body><h2>Authorization complete</h2>"
-                    b"<p>You can close this window.</p></body></html>"
+                    b"<html><body><h2>Authorization complete</h2><p>You can close this window.</p></body></html>"
                 )
 
             def log_message(self, format, *args):
@@ -347,7 +344,9 @@ async def _authorize(server_name: str, config_path: str, timeout: float) -> None
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
-            self.wfile.write(b"<html><body><h2>Authorization complete</h2><p>You can close this window.</p></body></html>")
+            self.wfile.write(
+                b"<html><body><h2>Authorization complete</h2><p>You can close this window.</p></body></html>"
+            )
 
         def log_message(self, format, *args):
             pass  # suppress access logs
@@ -369,7 +368,7 @@ async def _authorize(server_name: str, config_path: str, timeout: float) -> None
     authorize_url = f"{auth_endpoint}?{urlencode(params)}"
 
     console.print(f"\n[bold]Authorizing MCP server:[/bold] {server_name}")
-    console.print(f"[dim]Opening browser...[/dim]\n")
+    console.print("[dim]Opening browser...[/dim]\n")
     webbrowser.open(authorize_url)
 
     # Wait for callback
