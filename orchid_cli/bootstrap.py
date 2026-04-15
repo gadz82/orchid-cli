@@ -3,6 +3,7 @@ Shared bootstrapping — load config, build graph, initialize persistence.
 
 Mirrors the lifespan logic from orchid-api but without FastAPI.
 SQLite storage is always initialized by default (no external DB required).
+MCP token storage shares the same SQLite database as chat persistence.
 """
 
 from __future__ import annotations
@@ -10,15 +11,17 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from orchid_ai.config.loader import load_config
 from orchid_ai.config.schema import AgentsConfig
+from orchid_ai.core.mcp import MCPTokenStore
 from orchid_ai.core.repository import VectorReader, VectorStoreAdmin
 from orchid_ai.graph.graph import build_graph
 from orchid_ai.persistence.base import ChatStorage
 from orchid_ai.persistence.factory import build_chat_storage
+from orchid_ai.persistence.mcp_token_factory import build_mcp_token_store
 from orchid_ai.rag.factory import build_reader
 from orchid_ai.runtime import OrchidRuntime
 
@@ -93,6 +96,9 @@ DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.SQLiteChatStorage"
 DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
 
 
+DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.SQLiteMCPTokenStore"
+
+
 @dataclass
 class OrchidContext:
     """Runtime context for CLI operations."""
@@ -102,6 +108,8 @@ class OrchidContext:
     chat_repo: ChatStorage
     config: AgentsConfig
     model: str
+    mcp_token_store: MCPTokenStore | None = None
+    runtime: OrchidRuntime = field(default_factory=OrchidRuntime)
 
 
 async def bootstrap(
@@ -153,10 +161,18 @@ async def bootstrap(
     chat_repo = build_chat_storage(class_path=resolved_storage_class, dsn=resolved_dsn)
     await chat_repo.init_db()
 
+    # MCP OAuth token storage — shares the same SQLite DB as chat persistence
+    mcp_token_store = build_mcp_token_store(
+        class_path=DEFAULT_TOKEN_STORE_CLASS,
+        dsn=resolved_dsn,  # same DB file as chat storage
+    )
+    await mcp_token_store.init_db()
+
     # Build graph
     runtime = OrchidRuntime(
         default_model=resolved_model,
         reader=reader,
+        mcp_token_store=mcp_token_store,
     )
     graph = build_graph(
         config=agents_config,
@@ -177,6 +193,8 @@ async def bootstrap(
         chat_repo=chat_repo,
         config=agents_config,
         model=resolved_model,
+        mcp_token_store=mcp_token_store,
+        runtime=runtime,
     )
 
 
@@ -187,4 +205,6 @@ async def cli_context(config_path: str, *, model: str = ""):
     try:
         yield ctx
     finally:
+        if ctx.mcp_token_store:
+            await ctx.mcp_token_store.close()
         await ctx.chat_repo.close()
