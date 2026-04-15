@@ -379,11 +379,30 @@ async def _send_message(ctx, chat_id: str, message: str, auth: AuthContext) -> t
         elif row.role == "assistant":
             history_messages.append(AIMessage(content=row.content, id=row.id))
 
-    initial_state = {
+    # Pre-flight MCP auth check — auto-trigger OAuth for unauthorized servers
+    mcp_auth_status: dict[str, bool] = {}
+    registry = ctx.runtime.mcp_auth_registry
+    store = ctx.mcp_token_store
+    if registry and not registry.empty and store:
+        for name in registry.oauth_servers:
+            token = await store.get_token(auth.tenant_key, auth.user_id, name)
+            mcp_auth_status[name] = token is not None and not token.is_expired
+
+        unauthorized = [name for name, ok in mcp_auth_status.items() if not ok]
+        if unauthorized:
+            from .mcp import _auto_authorize_servers
+
+            authorized = await _auto_authorize_servers(unauthorized, registry, auth, store)
+            for name in authorized:
+                mcp_auth_status[name] = True
+
+    initial_state: dict = {
         "messages": history_messages + [HumanMessage(content=message)],
         "auth_context": auth,
         "chat_id": chat_id,
     }
+    if mcp_auth_status:
+        initial_state["mcp_auth_status"] = mcp_auth_status
 
     result = await ctx.graph.ainvoke(initial_state)
 

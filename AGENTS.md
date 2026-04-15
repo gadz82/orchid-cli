@@ -21,6 +21,7 @@ orchid-cli/
       chat.py        Full CRUD: create, list, delete, history, send, interactive, rename, share
       config.py      validate command (checks agents.yaml)
       index.py       seed command (batch-index RAG data)
+      mcp.py         MCP OAuth: authorize, status, revoke per-server tokens
       skill.py       generate command (Claude Code skills from agents.yaml)
   pyproject.toml
 ```
@@ -72,6 +73,11 @@ orchid chat send      --config <path> "msg"    # Send single message
 orchid chat interactive --config <path>        # Interactive REPL mode
 orchid chat rename    --config <path> <id>     # Rename a chat
 orchid chat share     --config <path> <id>     # Promote RAG to user scope
+
+# MCP server OAuth
+orchid mcp status    --config <path>           # Show OAuth status for MCP servers
+orchid mcp authorize <server> --config <path>  # Authorize via browser (PKCE)
+orchid mcp revoke    <server> --config <path>  # Revoke stored token
 
 # Config
 orchid config validate <agents.yaml>           # Validate agent config
