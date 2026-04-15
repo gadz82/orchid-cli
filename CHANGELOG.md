@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.0.5 (2026-04-15)
+
+### Bug Fixes
+
+- Bump orchid-ai dependency to v1.2.14 in CLI and API
+  ([`1400c62`](https://github.com/gadz82/orchid-cli/commit/1400c62664872c4daae8253e10325586a92a7c27))
+
+- Simplify HTML content formatting and remove unused imports in mcp_auth and cli commands
+  ([`abca379`](https://github.com/gadz82/orchid-cli/commit/abca379a216e63a57e52c43bb0c041449e740725))
+
+- **cli**: MCP OAuth management commands and auto-authorization flow
+  ([`7b69dbd`](https://github.com/gadz82/orchid-cli/commit/7b69dbd1a88bc4cbb76b7d35faeebc96472dd749))
+
+
 ## v1.0.4 (2026-04-14)
 
 ### Bug Fixes
