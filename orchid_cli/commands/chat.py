@@ -355,9 +355,9 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
                     console.print(f"[red]Unknown command: {cmd}[/red]")
                     continue
 
-            # Send message
-            response_text, agents_used = await _send_message(ctx, current_chat_id, stripped, auth)
-            console.print(f"\n[bold green]Assistant:[/bold green] {response_text}")
+            # Send message (streaming in interactive mode for real-time output)
+            console.print("\n[bold green]Assistant:[/bold green] ", end="")
+            response_text, agents_used = await _send_message(ctx, current_chat_id, stripped, auth, streaming=True)
             if agents_used:
                 console.print(f"  [dim]Agents: {', '.join(agents_used)}[/dim]")
             console.print()
@@ -368,7 +368,9 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
 # ── Helpers ─────────────────────────────────────────────────
 
 
-async def _send_message(ctx, chat_id: str, message: str, auth: AuthContext) -> tuple[str, list[str]]:
+async def _send_message(
+    ctx, chat_id: str, message: str, auth: AuthContext, *, streaming: bool = False
+) -> tuple[str, list[str]]:
     """Send a message through the graph, persist to storage, return (response, agents_used)."""
     # Load history
     history_rows = await ctx.chat_repo.get_messages(chat_id, limit=50)
@@ -404,10 +406,13 @@ async def _send_message(ctx, chat_id: str, message: str, auth: AuthContext) -> t
     if mcp_auth_status:
         initial_state["mcp_auth_status"] = mcp_auth_status
 
-    result = await ctx.graph.ainvoke(initial_state)
-
-    response_text = result.get("final_response", "No response generated.")
-    agents_used = result.get("active_agents", [])
+    # Use streaming for interactive mode (prints tokens in real-time)
+    if streaming:
+        response_text, agents_used = await _stream_graph(ctx, initial_state)
+    else:
+        result = await ctx.graph.ainvoke(initial_state)
+        response_text = result.get("final_response", "No response generated.")
+        agents_used = result.get("active_agents", [])
 
     # Persist original message + response
     await ctx.chat_repo.add_message(chat_id, "user", message)
@@ -421,6 +426,37 @@ async def _send_message(ctx, chat_id: str, message: str, auth: AuthContext) -> t
         await ctx.chat_repo.update_title(chat_id, title)
 
     return response_text, agents_used
+
+
+async def _stream_graph(ctx, initial_state: dict) -> tuple[str, list[str]]:
+    """Stream graph execution, printing tokens in real-time. Returns (full_response, agents_used)."""
+    import sys
+
+    full_parts: list[str] = []
+    seen_agents: set[str] = set()
+
+    async for msg, metadata in ctx.graph.astream(initial_state, stream_mode="messages"):
+        node = metadata.get("langgraph_node", "")
+
+        # Track agents
+        if node.endswith("_agent"):
+            agent_name = node.removesuffix("_agent")
+            seen_agents.add(agent_name)
+
+        # Print tokens from LLM responses (not tool calls)
+        content = getattr(msg, "content", "")
+        if content and isinstance(content, str):
+            tool_calls = getattr(msg, "tool_calls", None)
+            if not tool_calls:
+                full_parts.append(content)
+                sys.stdout.write(content)
+                sys.stdout.flush()
+
+    # Newline after streaming completes
+    print()
+
+    full_response = "".join(full_parts) or "No response generated."
+    return full_response, sorted(seen_agents)
 
 
 async def _resolve_chat_id(ctx, chat_id_prefix: str, auth: AuthContext) -> str | None:
