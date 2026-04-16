@@ -57,6 +57,8 @@ _YAML_TO_ENV: dict[tuple[str, str], str] = {
     ("tracing", "langsmith_tracing"): "LANGSMITH_TRACING",
     ("tracing", "langsmith_api_key"): "LANGSMITH_API_KEY",
     ("tracing", "langsmith_project"): "LANGSMITH_PROJECT",
+    ("checkpointer", "type"): "CHECKPOINTER_TYPE",
+    ("checkpointer", "dsn"): "CHECKPOINTER_DSN",
 }
 
 
@@ -168,12 +170,26 @@ async def bootstrap(
     )
     await mcp_token_store.init_db()
 
-    # Build graph
+    # Build runtime
     runtime = OrchidRuntime(
         default_model=resolved_model,
         reader=reader,
         mcp_token_store=mcp_token_store,
     )
+
+    # ── Checkpointer (optional — LangGraph state persistence) ──
+    resolved_checkpointer_type = os.environ.get("CHECKPOINTER_TYPE", "")
+    if resolved_checkpointer_type:
+        from orchid_ai.checkpointing import build_checkpointer
+
+        resolved_checkpointer_dsn = os.environ.get("CHECKPOINTER_DSN", "")
+        checkpointer = await build_checkpointer(
+            checkpointer_type=resolved_checkpointer_type,
+            dsn=resolved_checkpointer_dsn,
+        )
+        runtime.checkpointer = checkpointer
+        logger.info("[CLI] Checkpointer: %s", type(checkpointer).__name__)
+
     graph = build_graph(
         config=agents_config,
         runtime=runtime,
@@ -205,6 +221,10 @@ async def cli_context(config_path: str, *, model: str = ""):
     try:
         yield ctx
     finally:
+        if ctx.runtime.checkpointer:
+            from orchid_ai.checkpointing import shutdown_checkpointer
+
+            await shutdown_checkpointer(ctx.runtime.checkpointer)
         if ctx.mcp_token_store:
             await ctx.mcp_token_store.close()
         await ctx.chat_repo.close()
