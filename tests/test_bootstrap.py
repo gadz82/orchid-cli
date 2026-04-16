@@ -1,4 +1,5 @@
 """Tests for orchid_cli.bootstrap — config loading and YAML overlay."""
+
 from __future__ import annotations
 
 import os
@@ -6,7 +7,8 @@ import tempfile
 
 import yaml
 
-from orchid_cli.bootstrap import _YAML_TO_ENV, _apply_yaml_to_env
+from orchid_ai.config.yaml_env import YAML_TO_ENV
+from orchid_cli.bootstrap import _apply_yaml_to_env
 
 
 class TestApplyYamlToEnv:
@@ -69,8 +71,8 @@ class TestApplyYamlToEnv:
 class TestYamlToEnvMapping:
     def test_storage_keys_present(self):
         """Storage keys exist in mapping (even though they're skipped at runtime)."""
-        assert ("storage", "class") in _YAML_TO_ENV
-        assert ("storage", "dsn") in _YAML_TO_ENV
+        assert ("storage", "class") in YAML_TO_ENV
+        assert ("storage", "dsn") in YAML_TO_ENV
 
     def test_agents_key_present(self):
-        assert ("agents", "config_path") in _YAML_TO_ENV
+        assert ("agents", "config_path") in YAML_TO_ENV

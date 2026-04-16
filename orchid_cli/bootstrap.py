@@ -27,40 +27,6 @@ from orchid_ai.runtime import OrchidRuntime
 
 logger = logging.getLogger(__name__)
 
-# ── YAML key → env var mapping (same as orchid-api/settings.py) ──────
-_YAML_TO_ENV: dict[tuple[str, str], str] = {
-    ("agents", "config_path"): "AGENTS_CONFIG_PATH",
-    ("llm", "model"): "LITELLM_MODEL",
-    ("llm", "ollama_api_base"): "OLLAMA_API_BASE",
-    ("llm", "groq_api_key"): "GROQ_API_KEY",
-    ("llm", "gemini_api_key"): "GEMINI_API_KEY",
-    ("llm", "anthropic_api_key"): "ANTHROPIC_API_KEY",
-    ("llm", "openai_api_key"): "OPENAI_API_KEY",
-    ("auth", "dev_bypass"): "DEV_AUTH_BYPASS",
-    ("auth", "identity_resolver_class"): "IDENTITY_RESOLVER_CLASS",
-    ("auth", "domain"): "AUTH_DOMAIN",
-    ("startup", "hook"): "STARTUP_HOOK",
-    ("rag", "vector_backend"): "VECTOR_BACKEND",
-    ("rag", "qdrant_url"): "QDRANT_URL",
-    ("rag", "embedding_model"): "EMBEDDING_MODEL",
-    ("rag", "openai_api_key"): "OPENAI_API_KEY",
-    ("rag", "gemini_api_key"): "GEMINI_API_KEY",
-    ("upload", "vision_model"): "VISION_MODEL",
-    ("upload", "namespace"): "UPLOAD_NAMESPACE",
-    ("upload", "max_size_mb"): "UPLOAD_MAX_SIZE_MB",
-    ("upload", "chunk_size"): "CHUNK_SIZE",
-    ("upload", "chunk_overlap"): "CHUNK_OVERLAP",
-    ("storage", "class"): "CHAT_STORAGE_CLASS",
-    ("storage", "dsn"): "CHAT_DB_DSN",
-    ("mcp", "catalog_url"): "MCP_CATALOG_URL",
-    ("mcp", "notifications_url"): "MCP_NOTIFICATIONS_URL",
-    ("tracing", "langsmith_tracing"): "LANGSMITH_TRACING",
-    ("tracing", "langsmith_api_key"): "LANGSMITH_API_KEY",
-    ("tracing", "langsmith_project"): "LANGSMITH_PROJECT",
-    ("checkpointer", "type"): "CHECKPOINTER_TYPE",
-    ("checkpointer", "dsn"): "CHECKPOINTER_DSN",
-}
-
 
 def _apply_yaml_to_env(config_path: str) -> None:
     """Parse orchid.yml and export values as env vars (if not already set).
@@ -69,28 +35,9 @@ def _apply_yaml_to_env(config_path: str) -> None:
     defaults (SQLite at ~/.orchid/chats.db) that are more appropriate
     than Docker-oriented paths often found in orchid.yml.
     """
-    try:
-        import yaml
+    from orchid_ai.config.yaml_env import apply_yaml_to_env
 
-        with open(config_path) as f:
-            data = yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        logger.warning("[CLI] Config file %s not found — ignoring", config_path)
-        return
-
-    # Storage config in orchid.yml is typically Docker-oriented (e.g. /data/chats.db).
-    # The CLI defaults to ~/.orchid/chats.db which is always writable.
-    _SKIP_SECTIONS = {"storage"}
-
-    for section, body in data.items():
-        if not isinstance(body, dict) or section in _SKIP_SECTIONS:
-            continue
-        for key, value in body.items():
-            env_var = _YAML_TO_ENV.get((section, key))
-            if env_var and env_var not in os.environ:
-                os.environ[env_var] = str(value)
-
-    logger.debug("[CLI] Applied YAML config from %s", config_path)
+    apply_yaml_to_env(config_path, skip_sections={"storage"})
 
 
 # Defaults — SQLite storage ships with orchid, no external DB needed

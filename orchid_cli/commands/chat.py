@@ -15,7 +15,7 @@ Mirrors orchid-api chat endpoints:
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from langchain_core.messages import AIMessage, HumanMessage
@@ -249,6 +249,89 @@ def interactive(
     asyncio.run(_interactive(chat_id, config, model))
 
 
+# ── Slash-command dispatch table ─────────────────────────────
+
+
+async def _cmd_list(ctx, _arg: str, current_chat_id: str, auth) -> str | None:
+    sessions = await ctx.chat_repo.list_chats(tenant_id=auth.tenant_key, user_id=auth.user_id)
+    if not sessions:
+        console.print("[dim]No chats.[/dim]")
+    else:
+        for s in sessions:
+            marker = " [bold]← current[/bold]" if s.id == current_chat_id else ""
+            console.print(f"  {s.id[:12]}…  {s.title}{marker}")
+    console.print()
+    return None
+
+
+async def _cmd_switch(ctx, arg: str, current_chat_id: str, auth) -> str | None:
+    if not arg:
+        console.print("[red]Usage: /switch <chat_id>[/red]")
+        return None
+    new_id = await _resolve_chat_id(ctx, arg, auth)
+    if new_id:
+        chat = await ctx.chat_repo.get_chat(new_id)
+        console.print(f"[bold]Switched to:[/bold] {chat.title} ({new_id[:12]}…)\n")
+        return new_id
+    return None
+
+
+async def _cmd_new(ctx, arg: str, _current_chat_id: str, auth) -> str | None:
+    title = arg or "Interactive session"
+    new_chat = await ctx.chat_repo.create_chat(
+        tenant_id=auth.tenant_key,
+        user_id=auth.user_id,
+        title=title,
+    )
+    console.print(f"[bold green]New chat:[/bold green] {new_chat.id[:12]}… — {title}\n")
+    return new_chat.id
+
+
+async def _cmd_history(ctx, _arg: str, current_chat_id: str, _auth) -> str | None:
+    messages = await ctx.chat_repo.get_messages(current_chat_id, limit=20)
+    if not messages:
+        console.print("[dim]No messages yet.[/dim]\n")
+    else:
+        for msg in messages:
+            if msg.role == "user":
+                console.print(f"  [cyan]You:[/cyan] {msg.content[:80]}")
+            elif msg.role == "assistant":
+                console.print(f"  [green]Asst:[/green] {msg.content[:80]}")
+        console.print()
+    return None
+
+
+async def _cmd_rename(ctx, arg: str, current_chat_id: str, _auth) -> str | None:
+    if not arg:
+        console.print("[red]Usage: /rename <new title>[/red]")
+        return None
+    await ctx.chat_repo.update_title(current_chat_id, arg)
+    console.print(f"[bold]Renamed:[/bold] {arg}\n")
+    return None
+
+
+# Handler signature: (ctx, arg, current_chat_id, auth) -> new_chat_id or None
+_SLASH_COMMANDS: dict[str, Any] = {
+    "/list": _cmd_list,
+    "/switch": _cmd_switch,
+    "/new": _cmd_new,
+    "/history": _cmd_history,
+    "/rename": _cmd_rename,
+}
+
+
+async def _dispatch_slash_command(ctx, cmd: str, arg: str, current_chat_id: str, auth) -> str | None:
+    """Dispatch a slash command. Returns new chat_id if changed, else None."""
+    handler = _SLASH_COMMANDS.get(cmd)
+    if handler:
+        return await handler(ctx, arg, current_chat_id, auth)
+    console.print(f"[red]Unknown command: {cmd}[/red]")
+    return None
+
+
+# ── Interactive REPL ────────────────────────────────────────
+
+
 async def _interactive(chat_id: str | None, config_path: str, model: str) -> None:
     auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
@@ -285,7 +368,7 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
             if not stripped:
                 continue
 
-            # Handle slash commands
+            # Handle slash commands via dispatch table
             if stripped.startswith("/"):
                 parts = stripped.split(maxsplit=1)
                 cmd = parts[0].lower()
@@ -294,66 +377,10 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
                 if cmd in ("/quit", "/exit", "/q"):
                     break
 
-                elif cmd == "/list":
-                    sessions = await ctx.chat_repo.list_chats(
-                        tenant_id=auth.tenant_key,
-                        user_id=auth.user_id,
-                    )
-                    if not sessions:
-                        console.print("[dim]No chats.[/dim]")
-                    else:
-                        for s in sessions:
-                            marker = " [bold]← current[/bold]" if s.id == current_chat_id else ""
-                            console.print(f"  {s.id[:12]}…  {s.title}{marker}")
-                    console.print()
-                    continue
-
-                elif cmd == "/switch":
-                    if not arg:
-                        console.print("[red]Usage: /switch <chat_id>[/red]")
-                        continue
-                    new_id = await _resolve_chat_id(ctx, arg, auth)
-                    if new_id:
-                        current_chat_id = new_id
-                        chat = await ctx.chat_repo.get_chat(current_chat_id)
-                        console.print(f"[bold]Switched to:[/bold] {chat.title} ({current_chat_id[:12]}…)\n")
-                    continue
-
-                elif cmd == "/new":
-                    title = arg or "Interactive session"
-                    new_chat = await ctx.chat_repo.create_chat(
-                        tenant_id=auth.tenant_key,
-                        user_id=auth.user_id,
-                        title=title,
-                    )
-                    current_chat_id = new_chat.id
-                    console.print(f"[bold green]New chat:[/bold green] {current_chat_id[:12]}… — {title}\n")
-                    continue
-
-                elif cmd == "/history":
-                    messages = await ctx.chat_repo.get_messages(current_chat_id, limit=20)
-                    if not messages:
-                        console.print("[dim]No messages yet.[/dim]\n")
-                    else:
-                        for msg in messages:
-                            if msg.role == "user":
-                                console.print(f"  [cyan]You:[/cyan] {msg.content[:80]}")
-                            elif msg.role == "assistant":
-                                console.print(f"  [green]Asst:[/green] {msg.content[:80]}")
-                        console.print()
-                    continue
-
-                elif cmd == "/rename":
-                    if not arg:
-                        console.print("[red]Usage: /rename <new title>[/red]")
-                        continue
-                    await ctx.chat_repo.update_title(current_chat_id, arg)
-                    console.print(f"[bold]Renamed:[/bold] {arg}\n")
-                    continue
-
-                else:
-                    console.print(f"[red]Unknown command: {cmd}[/red]")
-                    continue
+                result = await _dispatch_slash_command(ctx, cmd, arg, current_chat_id, auth)
+                if result is not None:
+                    current_chat_id = result  # /switch and /new update the active chat
+                continue
 
             # Send message (streaming in interactive mode for real-time output)
             console.print("\n[bold green]Assistant:[/bold green] ", end="")
