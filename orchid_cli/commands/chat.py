@@ -398,19 +398,32 @@ async def _send_message(
             for name in authorized:
                 mcp_auth_status[name] = True
 
-    initial_state: dict = {
-        "messages": history_messages + [HumanMessage(content=message)],
-        "auth_context": auth,
-        "chat_id": chat_id,
-    }
+    # When a checkpointer is active the graph persists conversation state
+    # internally — only send the new user message to avoid duplication.
+    has_checkpointer = ctx.runtime.checkpointer is not None
+
+    if has_checkpointer:
+        initial_state: dict = {
+            "messages": [HumanMessage(content=message)],
+            "auth_context": auth,
+            "chat_id": chat_id,
+        }
+    else:
+        initial_state: dict = {
+            "messages": history_messages + [HumanMessage(content=message)],
+            "auth_context": auth,
+            "chat_id": chat_id,
+        }
     if mcp_auth_status:
         initial_state["mcp_auth_status"] = mcp_auth_status
 
+    graph_config: dict = {"configurable": {"thread_id": chat_id}}
+
     # Use streaming for interactive mode (prints tokens in real-time)
     if streaming:
-        response_text, agents_used = await _stream_graph(ctx, initial_state)
+        response_text, agents_used = await _stream_graph(ctx, initial_state, config=graph_config)
     else:
-        result = await ctx.graph.ainvoke(initial_state)
+        result = await _invoke_with_approval(ctx, initial_state, graph_config)
         response_text = result.get("final_response", "No response generated.")
         agents_used = result.get("active_agents", [])
 
@@ -428,14 +441,64 @@ async def _send_message(
     return response_text, agents_used
 
 
-async def _stream_graph(ctx, initial_state: dict) -> tuple[str, list[str]]:
+async def _invoke_with_approval(ctx, initial_state: dict, graph_config: dict) -> dict:
+    """Invoke the graph, handling HITL tool approval interrupts.
+
+    When the graph pauses for tool approval (``GraphInterrupt``), the
+    user is prompted in the terminal.  On approval the graph resumes;
+    on denial the tool is skipped.
+    """
+    from rich.prompt import Confirm
+
+    invocation_input = initial_state
+
+    while True:
+        try:
+            return await ctx.graph.ainvoke(invocation_input, config=graph_config)
+        except Exception as exc:
+            if type(exc).__name__ != "GraphInterrupt":
+                raise
+            interrupts = exc.args[0] if exc.args else []
+            if not interrupts:
+                raise
+
+            # Prompt user for each interrupt
+            approved = True
+            for interrupt_obj in interrupts:
+                val = interrupt_obj.value
+                if isinstance(val, dict):
+                    tool_name = val.get("tool", "unknown")
+                    tool_args = val.get("args", {})
+                    agent_name = val.get("agent", "")
+                    console.print(
+                        f"\n[bold yellow]Tool approval needed[/bold yellow] "
+                        f"({agent_name}): [bold]{tool_name}[/bold]({tool_args})"
+                    )
+                else:
+                    console.print(f"\n[bold yellow]Approval needed:[/bold yellow] {val}")
+
+                if not Confirm.ask("[bold]Approve execution?[/bold]", default=True):
+                    approved = False
+
+            # Resume with decision
+            from langgraph.types import Command
+
+            invocation_input = Command(resume={"approved": approved})
+
+
+async def _stream_graph(
+    ctx,
+    initial_state: dict,
+    *,
+    config: dict | None = None,
+) -> tuple[str, list[str]]:
     """Stream graph execution, printing tokens in real-time. Returns (full_response, agents_used)."""
     import sys
 
     full_parts: list[str] = []
     seen_agents: set[str] = set()
 
-    async for msg, metadata in ctx.graph.astream(initial_state, stream_mode="messages"):
+    async for msg, metadata in ctx.graph.astream(initial_state, config=config, stream_mode="messages"):
         node = metadata.get("langgraph_node", "")
 
         # Track agents
