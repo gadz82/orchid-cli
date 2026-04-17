@@ -114,15 +114,77 @@ Slash commands available inside interactive mode:
 orchid config validate path/to/agents.yaml
 ```
 
-### RAG Indexing
+### MCP Server Authorization
+
+Manage per-server OAuth for MCP servers that declare `auth.mode: oauth` in `agents.yaml`.
 
 ```bash
-# Seed the vector store with static data
-orchid index seed -c orchid.yml
+# Show authorization status for every OAuth-enabled MCP server
+orchid mcp status -c orchid.yml
 
-# Seed for a specific tenant
-orchid index seed -c orchid.yml --tenant my-tenant
+# Authorize a specific MCP server via browser (PKCE flow)
+orchid mcp authorize <server-name> -c orchid.yml
+orchid mcp authorize <server-name> -c orchid.yml --timeout 180
+
+# Revoke the stored token for a server
+orchid mcp revoke <server-name> -c orchid.yml
 ```
+
+Chat commands also **auto-authorize** any unauthorized MCP servers on first use — the CLI opens the browser, waits for consent, stores the token, and proceeds.
+
+### RAG Indexing
+
+Seed the vector store with data, **on startup or any time later**:
+
+```bash
+# Run the registered StaticIndexer (consumer-provided seed data)
+orchid index seed -c orchid.yml --tenant my-tenant
+
+# Index a single document (PDF, DOCX, XLSX, CSV, TXT, MD, PNG, JPG)
+orchid index file ./docs/faq.pdf -n support -c orchid.yml
+
+# Recursively index all supported files in a directory
+orchid index dir ./docs -n knowledge_base -c orchid.yml
+orchid index dir ./docs -n knowledge_base --pattern '*.md' -c orchid.yml
+
+# Index a single block of inline text (no chunking)
+orchid index text "Support hours are 9-5 EST Mon-Fri." \
+    -n support --title "Support Hours" -c orchid.yml
+
+# Bulk-index documents from a JSON file
+orchid index json-file faqs.json -n support -c orchid.yml
+```
+
+**JSON format** for `json-file`:
+
+```json
+[
+  {"id": "ref-1", "content": "Refund policy is 30 days...",
+   "metadata": {"category": "billing"}},
+  {"content": "2FA setup: Account > Security > Enable 2FA..."}
+]
+```
+
+**Shared flags for all index subcommands:**
+
+| Flag | Purpose | Default |
+|------|---------|---------|
+| `--namespace` / `-n` | Target vector store collection (**required** except for `seed`) | — |
+| `--config` / `-c` | Path to `orchid.yml` | `""` |
+| `--tenant` / `-t` | Tenant ID (use `__shared__` for cross-tenant seed data) | `"default"` |
+| `--scope` / `-s` | Scope level: `tenant` \| `shared` \| `user` | `"tenant"` |
+| `--user` | User ID (required when `--scope user`) | `""` |
+
+**File/dir-specific flags:**
+
+| Flag | Purpose | Default |
+|------|---------|---------|
+| `--chunk-size` | Characters per chunk | 1000 |
+| `--chunk-overlap` | Chunk overlap | 200 |
+| `--vision-model` | Vision LLM for image parsing (e.g. `ollama/minicpm-v`) | `""` |
+| `--pattern` | Glob filter (dir only) | all supported extensions |
+
+The `file` and `dir` commands use the same ingestion pipeline as the orchid-api `/upload` endpoint (parse → chunk → embed → store). The `text` and `json-file` commands skip chunking and store documents as-is.
 
 ### Skill Generation (Claude Code)
 
@@ -183,8 +245,14 @@ auth:
 rag:
   vector_backend: null      # no Qdrant needed for basic usage
 storage:
-  class: orchid.persistence.sqlite.SQLiteChatStorage
+  class: orchid_ai.persistence.sqlite.SQLiteChatStorage
   dsn: ~/.orchid/chats.db
+
+# LangGraph checkpointer (optional) — enables persistent graph state,
+# required for Human-in-the-Loop tool approval
+checkpointer:
+  type: sqlite                   # memory | sqlite | postgres | dotted.Class
+  dsn: ~/.orchid/checkpoints.db
 ```
 
 ### Defaults
@@ -193,11 +261,31 @@ storage:
 |-----------|---------|-------------|
 | LLM model | `ollama/llama3.2` | `LITELLM_MODEL` |
 | Vector backend | `qdrant` | `VECTOR_BACKEND` |
-| Storage class | `orchid.persistence.sqlite.SQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
+| Storage class | `orchid_ai.persistence.sqlite.SQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
-| Token storage | `~/.orchid/tokens.json` | -- |
+| Checkpointer | disabled | `CHECKPOINTER_TYPE` / `CHECKPOINTER_DSN` |
+| Token storage | `~/.orchid/tokens.json` | — |
 
 Chat data is stored in SQLite at `~/.orchid/chats.db` by default. OAuth tokens are stored at `~/.orchid/tokens.json` with owner-only permissions (`0o600`). Both directories are created automatically on first use.
+
+### Checkpointing
+
+The CLI supports LangGraph checkpointers for persistent graph state. This is **required** when any agent uses Human-in-the-Loop (`requires_approval: true` on tools).
+
+```yaml
+# In orchid.yml
+checkpointer:
+  type: sqlite              # "memory" | "sqlite" | "postgres" | dotted.Class.Path
+  dsn: ~/.orchid/checkpoints.db
+```
+
+Install checkpointer extras as needed:
+
+```bash
+pip install orchid-ai[checkpoint-sqlite]      # SQLite backend
+pip install orchid-ai[checkpoint-postgres]    # PostgreSQL backend
+pip install orchid-ai[all-checkpoints]        # Both
+```
 
 ## Authentication
 
@@ -233,26 +321,55 @@ When `auth.dev_bypass: true` or `auth.cli` is absent, the CLI uses a dummy token
 - Python 3.11+
 - Ollama running locally (for local LLM models): `ollama pull llama3.2`
 
+## Extending the CLI (plugins)
+
+Consumer packages can register **custom CLI subcommands** via Python entry points — no fork or patch required. Declare a `typer.Typer` instance and expose it in `pyproject.toml`:
+
+```toml
+# In your consumer package's pyproject.toml
+[project.entry-points."orchid_cli.commands"]
+mycommand = "mypackage.cli:app"
+```
+
+```python
+# mypackage/cli.py
+import typer
+app = typer.Typer(help="My custom commands")
+
+@app.command()
+def greet(name: str):
+    """Greet someone."""
+    typer.echo(f"Hello {name}!")
+```
+
+After `pip install mypackage`, the command is available as `orchid mycommand greet Alice`. Plugins load automatically at startup; failed plugins log a warning but do not block the CLI.
+
 ## Architecture
 
 ```
 orchid_cli/
-  main.py          Typer entry point -- registers sub-commands
-  bootstrap.py     Shared startup: load config, build graph, init storage
+  main.py          Typer entry point — registers built-in + plugin subcommands
+  bootstrap.py     Shared startup: load config, build graph, init storage,
+                   wire checkpointer (optional)
   auth/            OAuth 2.0 authentication (self-contained)
-    config.py      Provider settings from orchid.yml + OIDC discovery
+    config.py      Provider settings from orchid.yml
+    oidc.py        Shared OIDC discovery utility
     flow.py        Authorization Code + PKCE flow (browser, localhost callback)
     token_store.py Secure token persistence (~/.orchid/tokens.json)
-    middleware.py   Token refresh + AuthContext builder
+    middleware.py  Token refresh + AuthContext builder
+    pkce.py        PKCE code verifier/challenge helpers
   commands/
     auth.py        login, logout, status subcommands
-    chat.py        Full CRUD + messaging + interactive mode
+    chat.py        Full CRUD + messaging + interactive mode (slash-command
+                   dispatch table)
     config.py      Validate agents.yaml
-    index.py       Seed RAG vector store
+    mcp.py         Per-server MCP OAuth: status, authorize, revoke
+                   (shares PKCE flow via oidc.py utility)
+    index.py       On-demand RAG seeding: seed, file, dir, text, json-file
     skill.py       Generate Claude Code skills from agents.yaml
 ```
 
-The CLI is a thin layer that calls `orchid` SDK functions and displays results via Rich. The `auth/` subpackage is fully self-contained -- no OAuth logic leaks into chat commands or bootstrap.
+The CLI is a thin layer that calls `orchid` SDK functions and displays results via Rich. The `auth/` subpackage is fully self-contained — no OAuth logic leaks into chat commands or bootstrap. Interactive-mode slash commands use a dispatch table (`_SLASH_COMMANDS` in `chat.py`) so new slash commands can be added with a single handler function.
 
 ## Development
 

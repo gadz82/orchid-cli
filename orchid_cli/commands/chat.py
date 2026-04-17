@@ -15,7 +15,7 @@ Mirrors orchid-api chat endpoints:
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from langchain_core.messages import AIMessage, HumanMessage
@@ -26,6 +26,12 @@ from orchid_ai.core.state import AuthContext
 
 from ..auth.middleware import get_auth_context
 from ..bootstrap import cli_context
+from ..slash_commands import (
+    SlashContext,
+    get_slash_command,
+    list_slash_commands,
+    register_slash_command,
+)
 
 app = typer.Typer(help="Chat management and messaging", no_args_is_help=True)
 console = Console()
@@ -249,6 +255,119 @@ def interactive(
     asyncio.run(_interactive(chat_id, config, model))
 
 
+# ── Built-in slash commands (registered via the extensible registry) ─
+
+
+async def _cmd_list(sc: SlashContext) -> str | None:
+    sessions = await sc.ctx.chat_repo.list_chats(tenant_id=sc.auth.tenant_key, user_id=sc.auth.user_id)
+    if not sessions:
+        sc.console.print("[dim]No chats.[/dim]")
+    else:
+        for s in sessions:
+            marker = " [bold]← current[/bold]" if s.id == sc.current_chat_id else ""
+            sc.console.print(f"  {s.id[:12]}…  {s.title}{marker}")
+    sc.console.print()
+    return None
+
+
+async def _cmd_switch(sc: SlashContext) -> str | None:
+    if not sc.arg:
+        sc.console.print("[red]Usage: /switch <chat_id>[/red]")
+        return None
+    new_id = await _resolve_chat_id(sc.ctx, sc.arg, sc.auth)
+    if new_id:
+        chat = await sc.ctx.chat_repo.get_chat(new_id)
+        sc.console.print(f"[bold]Switched to:[/bold] {chat.title} ({new_id[:12]}…)\n")
+        return new_id
+    return None
+
+
+async def _cmd_new(sc: SlashContext) -> str | None:
+    title = sc.arg or "Interactive session"
+    new_chat = await sc.ctx.chat_repo.create_chat(
+        tenant_id=sc.auth.tenant_key,
+        user_id=sc.auth.user_id,
+        title=title,
+    )
+    sc.console.print(f"[bold green]New chat:[/bold green] {new_chat.id[:12]}… — {title}\n")
+    return new_chat.id
+
+
+async def _cmd_history(sc: SlashContext) -> str | None:
+    messages = await sc.ctx.chat_repo.get_messages(sc.current_chat_id, limit=20)
+    if not messages:
+        sc.console.print("[dim]No messages yet.[/dim]\n")
+    else:
+        for msg in messages:
+            if msg.role == "user":
+                sc.console.print(f"  [cyan]You:[/cyan] {msg.content[:80]}")
+            elif msg.role == "assistant":
+                sc.console.print(f"  [green]Asst:[/green] {msg.content[:80]}")
+        sc.console.print()
+    return None
+
+
+async def _cmd_rename(sc: SlashContext) -> str | None:
+    if not sc.arg:
+        sc.console.print("[red]Usage: /rename <new title>[/red]")
+        return None
+    await sc.ctx.chat_repo.update_title(sc.current_chat_id, sc.arg)
+    sc.console.print(f"[bold]Renamed:[/bold] {sc.arg}\n")
+    return None
+
+
+# Built-in slash commands registered at import time.  We guard against
+# double-registration (happens under ``importlib.reload`` and in some
+# pytest collection modes) by first clearing our own entries from the
+# registry — integrator-added commands under different names are kept.
+_BUILTIN_SLASH_COMMANDS: tuple[tuple[str, Any, str], ...] = (
+    ("/list", _cmd_list, "List chats"),
+    ("/switch", _cmd_switch, "Switch to another chat (by prefix)"),
+    ("/new", _cmd_new, "Create a new chat"),
+    ("/history", _cmd_history, "Show recent messages"),
+    ("/rename", _cmd_rename, "Rename the current chat"),
+)
+
+
+def _register_builtin_slash_commands() -> None:
+    """Register the chat module's built-in slash commands (idempotent).
+
+    Calling this twice is a no-op — each ``register_slash_command`` call
+    replaces the prior entry for that name, so the final state is the
+    same regardless of how many times the chat module is imported.
+    """
+    for name, handler, help_text in _BUILTIN_SLASH_COMMANDS:
+        register_slash_command(name, handler, help=help_text)
+
+
+_register_builtin_slash_commands()
+
+
+async def _dispatch_slash_command(
+    ctx,
+    cmd: str,
+    arg: str,
+    current_chat_id: str,
+    auth,
+) -> str | None:
+    """Dispatch a slash command via the registry. Returns new chat_id if changed, else None."""
+    entry = get_slash_command(cmd)
+    if entry is None:
+        console.print(f"[red]Unknown command: {cmd}[/red]")
+        return None
+    sc = SlashContext(
+        ctx=ctx,
+        arg=arg,
+        current_chat_id=current_chat_id,
+        auth=auth,
+        console=console,
+    )
+    return await entry.handler(sc)
+
+
+# ── Interactive REPL ────────────────────────────────────────
+
+
 async def _interactive(chat_id: str | None, config_path: str, model: str) -> None:
     auth = await get_auth_context(config_path)
     async with cli_context(config_path, model=model) as ctx:
@@ -270,7 +389,8 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
 
         console.print()
         console.print("[bold]Orchid Interactive Chat[/bold]")
-        console.print("Commands: /quit, /switch <id>, /list, /new [title], /history, /rename <title>")
+        registered = ", ".join(entry.name for entry in list_slash_commands())
+        console.print(f"Commands: /quit, {registered}")
         console.print()
 
         current_chat_id = resolved_id
@@ -285,7 +405,7 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
             if not stripped:
                 continue
 
-            # Handle slash commands
+            # Handle slash commands via dispatch table
             if stripped.startswith("/"):
                 parts = stripped.split(maxsplit=1)
                 cmd = parts[0].lower()
@@ -294,70 +414,14 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
                 if cmd in ("/quit", "/exit", "/q"):
                     break
 
-                elif cmd == "/list":
-                    sessions = await ctx.chat_repo.list_chats(
-                        tenant_id=auth.tenant_key,
-                        user_id=auth.user_id,
-                    )
-                    if not sessions:
-                        console.print("[dim]No chats.[/dim]")
-                    else:
-                        for s in sessions:
-                            marker = " [bold]← current[/bold]" if s.id == current_chat_id else ""
-                            console.print(f"  {s.id[:12]}…  {s.title}{marker}")
-                    console.print()
-                    continue
+                result = await _dispatch_slash_command(ctx, cmd, arg, current_chat_id, auth)
+                if result is not None:
+                    current_chat_id = result  # /switch and /new update the active chat
+                continue
 
-                elif cmd == "/switch":
-                    if not arg:
-                        console.print("[red]Usage: /switch <chat_id>[/red]")
-                        continue
-                    new_id = await _resolve_chat_id(ctx, arg, auth)
-                    if new_id:
-                        current_chat_id = new_id
-                        chat = await ctx.chat_repo.get_chat(current_chat_id)
-                        console.print(f"[bold]Switched to:[/bold] {chat.title} ({current_chat_id[:12]}…)\n")
-                    continue
-
-                elif cmd == "/new":
-                    title = arg or "Interactive session"
-                    new_chat = await ctx.chat_repo.create_chat(
-                        tenant_id=auth.tenant_key,
-                        user_id=auth.user_id,
-                        title=title,
-                    )
-                    current_chat_id = new_chat.id
-                    console.print(f"[bold green]New chat:[/bold green] {current_chat_id[:12]}… — {title}\n")
-                    continue
-
-                elif cmd == "/history":
-                    messages = await ctx.chat_repo.get_messages(current_chat_id, limit=20)
-                    if not messages:
-                        console.print("[dim]No messages yet.[/dim]\n")
-                    else:
-                        for msg in messages:
-                            if msg.role == "user":
-                                console.print(f"  [cyan]You:[/cyan] {msg.content[:80]}")
-                            elif msg.role == "assistant":
-                                console.print(f"  [green]Asst:[/green] {msg.content[:80]}")
-                        console.print()
-                    continue
-
-                elif cmd == "/rename":
-                    if not arg:
-                        console.print("[red]Usage: /rename <new title>[/red]")
-                        continue
-                    await ctx.chat_repo.update_title(current_chat_id, arg)
-                    console.print(f"[bold]Renamed:[/bold] {arg}\n")
-                    continue
-
-                else:
-                    console.print(f"[red]Unknown command: {cmd}[/red]")
-                    continue
-
-            # Send message
-            response_text, agents_used = await _send_message(ctx, current_chat_id, stripped, auth)
-            console.print(f"\n[bold green]Assistant:[/bold green] {response_text}")
+            # Send message (streaming in interactive mode for real-time output)
+            console.print("\n[bold green]Assistant:[/bold green] ", end="")
+            response_text, agents_used = await _send_message(ctx, current_chat_id, stripped, auth, streaming=True)
             if agents_used:
                 console.print(f"  [dim]Agents: {', '.join(agents_used)}[/dim]")
             console.print()
@@ -368,7 +432,9 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
 # ── Helpers ─────────────────────────────────────────────────
 
 
-async def _send_message(ctx, chat_id: str, message: str, auth: AuthContext) -> tuple[str, list[str]]:
+async def _send_message(
+    ctx, chat_id: str, message: str, auth: AuthContext, *, streaming: bool = False
+) -> tuple[str, list[str]]:
     """Send a message through the graph, persist to storage, return (response, agents_used)."""
     # Load history
     history_rows = await ctx.chat_repo.get_messages(chat_id, limit=50)
@@ -396,18 +462,34 @@ async def _send_message(ctx, chat_id: str, message: str, auth: AuthContext) -> t
             for name in authorized:
                 mcp_auth_status[name] = True
 
-    initial_state: dict = {
-        "messages": history_messages + [HumanMessage(content=message)],
-        "auth_context": auth,
-        "chat_id": chat_id,
-    }
+    # When a checkpointer is active the graph persists conversation state
+    # internally — only send the new user message to avoid duplication.
+    has_checkpointer = ctx.runtime.checkpointer is not None
+
+    if has_checkpointer:
+        initial_state: dict = {
+            "messages": [HumanMessage(content=message)],
+            "auth_context": auth,
+            "chat_id": chat_id,
+        }
+    else:
+        initial_state: dict = {
+            "messages": history_messages + [HumanMessage(content=message)],
+            "auth_context": auth,
+            "chat_id": chat_id,
+        }
     if mcp_auth_status:
         initial_state["mcp_auth_status"] = mcp_auth_status
 
-    result = await ctx.graph.ainvoke(initial_state)
+    graph_config: dict = {"configurable": {"thread_id": chat_id}}
 
-    response_text = result.get("final_response", "No response generated.")
-    agents_used = result.get("active_agents", [])
+    # Use streaming for interactive mode (prints tokens in real-time)
+    if streaming:
+        response_text, agents_used = await _stream_graph(ctx, initial_state, config=graph_config)
+    else:
+        result = await _invoke_with_approval(ctx, initial_state, graph_config)
+        response_text = result.get("final_response", "No response generated.")
+        agents_used = result.get("active_agents", [])
 
     # Persist original message + response
     await ctx.chat_repo.add_message(chat_id, "user", message)
@@ -421,6 +503,88 @@ async def _send_message(ctx, chat_id: str, message: str, auth: AuthContext) -> t
         await ctx.chat_repo.update_title(chat_id, title)
 
     return response_text, agents_used
+
+
+async def _invoke_with_approval(ctx, initial_state: dict, graph_config: dict) -> dict:
+    """Invoke the graph, handling HITL tool approval interrupts.
+
+    When the graph pauses for tool approval (``GraphInterrupt``), the
+    user is prompted in the terminal.  On approval the graph resumes;
+    on denial the tool is skipped.
+    """
+    from rich.prompt import Confirm
+
+    invocation_input = initial_state
+
+    while True:
+        try:
+            return await ctx.graph.ainvoke(invocation_input, config=graph_config)
+        except Exception as exc:
+            if type(exc).__name__ != "GraphInterrupt":
+                raise
+            interrupts = exc.args[0] if exc.args else []
+            if not interrupts:
+                raise
+
+            # Prompt user for each interrupt
+            approved = True
+            for interrupt_obj in interrupts:
+                val = interrupt_obj.value
+                if isinstance(val, dict):
+                    tool_name = val.get("tool", "unknown")
+                    tool_args = val.get("args", {})
+                    agent_name = val.get("agent", "")
+                    console.print(
+                        f"\n[bold yellow]Tool approval needed[/bold yellow] "
+                        f"({agent_name}): [bold]{tool_name}[/bold]({tool_args})"
+                    )
+                else:
+                    console.print(f"\n[bold yellow]Approval needed:[/bold yellow] {val}")
+
+                if not Confirm.ask("[bold]Approve execution?[/bold]", default=True):
+                    approved = False
+
+            # Resume with decision
+            from langgraph.types import Command
+
+            invocation_input = Command(resume={"approved": approved})
+
+
+async def _stream_graph(
+    ctx,
+    initial_state: dict,
+    *,
+    config: dict | None = None,
+) -> tuple[str, list[str]]:
+    """Stream graph execution, printing tokens in real-time. Returns (full_response, agents_used)."""
+    import sys
+
+    full_parts: list[str] = []
+    seen_agents: set[str] = set()
+
+    async for msg, metadata in ctx.graph.astream(initial_state, config=config, stream_mode="messages"):
+        node = metadata.get("langgraph_node", "")
+
+        # Track agents
+        if node.endswith("_agent"):
+            agent_name = node.removesuffix("_agent")
+            seen_agents.add(agent_name)
+
+        # Print tokens from LLM responses (not tool calls)
+        content = getattr(msg, "content", "")
+        if content and isinstance(content, str):
+            tool_calls = getattr(msg, "tool_calls", None)
+            if not tool_calls:
+                full_parts.append(content)
+                sys.stdout.write(content)
+                sys.stdout.flush()
+
+    # Newline after streaming completes.  Goes through ``console`` (not
+    # ``print``) so tests can capture it and Rich handles TTY detection.
+    console.print()
+
+    full_response = "".join(full_parts) or "No response generated."
+    return full_response, sorted(seen_agents)
 
 
 async def _resolve_chat_id(ctx, chat_id_prefix: str, auth: AuthContext) -> str | None:

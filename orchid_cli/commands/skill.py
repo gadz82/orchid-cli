@@ -27,9 +27,10 @@ from orchid_ai.config.schema import (
 )
 from orchid_ai.config.tool_registry import (
     load_tools_from_config,
-    get_tool,
     list_tools,
 )
+
+from ._tool_metadata import ToolMetadataSource, default_source
 
 app = typer.Typer(help="Generate Claude Code skills from Orchid config", no_args_is_help=True)
 console = Console()
@@ -403,20 +404,14 @@ def _ensure_tools_registered(config: AgentsConfig) -> None:
             pass  # fall back to inspect-based extraction
 
 
-def _get_tool_parameters(tool_name: str, module_path: str, func_name: str) -> dict[str, str]:
-    """Get tool parameters from the registry, falling back to inspect.
+# Shared source — registry-first, then inspect-based.  Overridable in
+# tests by assigning a different :class:`ToolMetadataSource`.
+_tool_metadata_source: ToolMetadataSource = default_source()
 
-    Returns a dict of param_name → description (the format expected by
-    ``_ToolScriptInfo``).
-    """
-    try:
-        entry = get_tool(tool_name)
-        if entry.parameters:
-            return {name: p.description or p.type for name, p in entry.parameters.items()}
-    except KeyError:
-        pass
-    # Fallback to inspect-based extraction
-    return _extract_parameters(module_path, func_name)
+
+def _get_tool_parameters(tool_name: str, module_path: str, func_name: str) -> dict[str, str]:
+    """Delegate to the configured :class:`ToolMetadataSource` chain."""
+    return _tool_metadata_source.get_parameters(tool_name, module_path, func_name)
 
 
 def _read_module_source(module_path: str) -> str | None:
@@ -439,65 +434,6 @@ def _strip_future_annotations(source: str) -> str:
             continue
         filtered.append(line)
     return "".join(filtered)
-
-
-def _extract_parameters(module_path: str, func_name: str) -> dict[str, str]:
-    """Extract parameter names and descriptions from a function's signature and docstring."""
-    try:
-        module = importlib.import_module(module_path)
-        func = getattr(module, func_name)
-        sig = inspect.signature(func)
-        docstring = inspect.getdoc(func) or ""
-
-        params: dict[str, str] = {}
-        for name, param in sig.parameters.items():
-            if name in ("kwargs", "self", "cls"):
-                continue
-            # Try to find description in docstring Parameters section
-            desc = _find_param_doc(docstring, name)
-            if not desc:
-                # Fall back to annotation
-                ann = param.annotation
-                if ann != inspect.Parameter.empty:
-                    desc = str(ann).replace("'", "")
-                else:
-                    desc = "string"
-            params[name] = desc
-
-        return params
-    except Exception:
-        return {}
-
-
-def _find_param_doc(docstring: str, param_name: str) -> str:
-    """Extract a parameter description from a NumPy-style docstring."""
-    lines = docstring.splitlines()
-    in_params = False
-    found_param = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped in ("Parameters", "Parameters:"):
-            in_params = True
-            continue
-        if in_params and stripped.startswith("---"):
-            continue
-        if in_params and stripped in ("Returns", "Returns:", "Raises", "Raises:"):
-            break
-        if in_params:
-            # Look for "param_name : type" line
-            if stripped.startswith(param_name) and ":" in stripped:
-                found_param = True
-                continue
-            if found_param:
-                if stripped and not stripped[0].isalpha() or not stripped:
-                    # Description line (indented) or blank
-                    if stripped:
-                        return stripped
-                    break
-                else:
-                    # Next parameter
-                    break
-    return ""
 
 
 def _build_usage_hint(func_name: str, params: dict[str, str]) -> str:

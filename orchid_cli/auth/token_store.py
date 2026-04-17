@@ -55,12 +55,21 @@ def save_token(client_id: str, token: StoredToken) -> None:
 
 
 def load_token(client_id: str) -> StoredToken | None:
-    """Load a previously stored token, or None if absent."""
+    """Load a previously stored token, or None if absent.
+
+    Unknown fields present in the on-disk JSON are ignored but logged at
+    DEBUG — useful to detect schema drift (e.g. a newer CLI wrote a
+    field this version doesn't know about yet).
+    """
     all_tokens = _read_all()
     data = all_tokens.get(client_id)
     if not data:
         return None
-    return StoredToken(**{k: v for k, v in data.items() if k in StoredToken.__dataclass_fields__})
+    known_fields = StoredToken.__dataclass_fields__.keys()
+    extras = set(data.keys()) - set(known_fields)
+    if extras:
+        logger.debug("[CLI Auth] Ignoring unknown token fields for %s: %s", client_id, sorted(extras))
+    return StoredToken(**{k: v for k, v in data.items() if k in known_fields})
 
 
 def delete_token(client_id: str) -> bool:
