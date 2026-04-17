@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v1.1.0 (2026-04-17)
+
+### Continuous Integration
+
+- Grant pull-requests: write permission to the test job
+  ([`3be63b5`](https://github.com/gadz82/orchid-cli/commit/3be63b545ceb1ccae4ac38e1a5853ea1d93307bc))
+
+### Features
+
+- Add HITL approval and checkpointer support to invoke
+  ([`b2b62f6`](https://github.com/gadz82/orchid-cli/commit/b2b62f6d0a0e8417aa83d4ab0e155c087a0d18d6))
+
+- Add LangGraph checkpointer integration for state persistence
+  ([`ef2b6e8`](https://github.com/gadz82/orchid-cli/commit/ef2b6e81978128432cfc96eedbe2196f52abf86b))
+
+- Add real-time streaming in interactive mode
+  ([`61d19d1`](https://github.com/gadz82/orchid-cli/commit/61d19d19da7e2dde5e275f6011e92d24b5a8463d))
+
+- Add shared hooks and utilities for CLI and frontend
+  ([`035f7ca`](https://github.com/gadz82/orchid-cli/commit/035f7caef5a6cb59ed9c48192a61ba5d43a67cc7))
+
+- Upgrade orchid-ai dependency to >=1.3.0
+  ([`aad58d8`](https://github.com/gadz82/orchid-cli/commit/aad58d82501f872322785f97fcedf16977fafaee))
+
+- **cli**: Extend vector-store indexing with new subcommands
+  ([`26a31d9`](https://github.com/gadz82/orchid-cli/commit/26a31d94045e45964234303ae1f0eaa2447411e2))
+
+- **cli**: Implement slash command dispatch table and plugin discovery
+  ([`d83c8a0`](https://github.com/gadz82/orchid-cli/commit/d83c8a0b57f97465871d279d2824ebbf5a444fc7))
+
+- **cli**: Refactor chat commands with extensible slash registry
+  ([`2f9ee6a`](https://github.com/gadz82/orchid-cli/commit/2f9ee6a319e58578a8d802c119216256703bc6bb))
+
+
 ## v1.0.5 (2026-04-15)
 
 ### Bug Fixes
