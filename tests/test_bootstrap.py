@@ -8,13 +8,13 @@ import tempfile
 import yaml
 
 from orchid_ai.config.yaml_env import YAML_TO_ENV
-from orchid_cli.bootstrap import _apply_yaml_to_env
+from orchid_cli.bootstrap import apply_cli_config
 
 
 class TestApplyYamlToEnv:
     def test_missing_file_is_silent(self):
         """Missing YAML file doesn't raise."""
-        _apply_yaml_to_env("/nonexistent/path.yml")  # should not raise
+        apply_cli_config("/nonexistent/path.yml")  # should not raise
 
     def test_applies_llm_settings(self):
         config = {"llm": {"model": "openai/gpt-4o"}}
@@ -22,7 +22,7 @@ class TestApplyYamlToEnv:
             yaml.dump(config, f)
             f.flush()
             os.environ.pop("LITELLM_MODEL", None)
-            _apply_yaml_to_env(f.name)
+            apply_cli_config(f.name)
             assert os.environ.get("LITELLM_MODEL") == "openai/gpt-4o"
         os.unlink(f.name)
 
@@ -38,7 +38,7 @@ class TestApplyYamlToEnv:
             os.environ.pop("CHAT_STORAGE_CLASS", None)
             os.environ.pop("CHAT_DB_DSN", None)
             os.environ.pop("LITELLM_MODEL", None)
-            _apply_yaml_to_env(f.name)
+            apply_cli_config(f.name)
             # Storage should NOT be set
             assert "CHAT_STORAGE_CLASS" not in os.environ
             assert "CHAT_DB_DSN" not in os.environ
@@ -52,7 +52,7 @@ class TestApplyYamlToEnv:
             yaml.dump(config, f)
             f.flush()
             os.environ["LITELLM_MODEL"] = "keep-this"
-            _apply_yaml_to_env(f.name)
+            apply_cli_config(f.name)
             assert os.environ["LITELLM_MODEL"] == "keep-this"
         os.unlink(f.name)
         os.environ.pop("LITELLM_MODEL", None)
@@ -63,7 +63,7 @@ class TestApplyYamlToEnv:
             yaml.dump(config, f)
             f.flush()
             os.environ.pop("AGENTS_CONFIG_PATH", None)
-            _apply_yaml_to_env(f.name)
+            apply_cli_config(f.name)
             assert os.environ.get("AGENTS_CONFIG_PATH") == "my/agents.yaml"
         os.unlink(f.name)
 

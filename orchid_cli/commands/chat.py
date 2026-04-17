@@ -26,6 +26,12 @@ from orchid_ai.core.state import AuthContext
 
 from ..auth.middleware import get_auth_context
 from ..bootstrap import cli_context
+from ..slash_commands import (
+    SlashContext,
+    get_slash_command,
+    list_slash_commands,
+    register_slash_command,
+)
 
 app = typer.Typer(help="Chat management and messaging", no_args_is_help=True)
 console = Console()
@@ -249,84 +255,114 @@ def interactive(
     asyncio.run(_interactive(chat_id, config, model))
 
 
-# ── Slash-command dispatch table ─────────────────────────────
+# ── Built-in slash commands (registered via the extensible registry) ─
 
 
-async def _cmd_list(ctx, _arg: str, current_chat_id: str, auth) -> str | None:
-    sessions = await ctx.chat_repo.list_chats(tenant_id=auth.tenant_key, user_id=auth.user_id)
+async def _cmd_list(sc: SlashContext) -> str | None:
+    sessions = await sc.ctx.chat_repo.list_chats(tenant_id=sc.auth.tenant_key, user_id=sc.auth.user_id)
     if not sessions:
-        console.print("[dim]No chats.[/dim]")
+        sc.console.print("[dim]No chats.[/dim]")
     else:
         for s in sessions:
-            marker = " [bold]← current[/bold]" if s.id == current_chat_id else ""
-            console.print(f"  {s.id[:12]}…  {s.title}{marker}")
-    console.print()
+            marker = " [bold]← current[/bold]" if s.id == sc.current_chat_id else ""
+            sc.console.print(f"  {s.id[:12]}…  {s.title}{marker}")
+    sc.console.print()
     return None
 
 
-async def _cmd_switch(ctx, arg: str, current_chat_id: str, auth) -> str | None:
-    if not arg:
-        console.print("[red]Usage: /switch <chat_id>[/red]")
+async def _cmd_switch(sc: SlashContext) -> str | None:
+    if not sc.arg:
+        sc.console.print("[red]Usage: /switch <chat_id>[/red]")
         return None
-    new_id = await _resolve_chat_id(ctx, arg, auth)
+    new_id = await _resolve_chat_id(sc.ctx, sc.arg, sc.auth)
     if new_id:
-        chat = await ctx.chat_repo.get_chat(new_id)
-        console.print(f"[bold]Switched to:[/bold] {chat.title} ({new_id[:12]}…)\n")
+        chat = await sc.ctx.chat_repo.get_chat(new_id)
+        sc.console.print(f"[bold]Switched to:[/bold] {chat.title} ({new_id[:12]}…)\n")
         return new_id
     return None
 
 
-async def _cmd_new(ctx, arg: str, _current_chat_id: str, auth) -> str | None:
-    title = arg or "Interactive session"
-    new_chat = await ctx.chat_repo.create_chat(
-        tenant_id=auth.tenant_key,
-        user_id=auth.user_id,
+async def _cmd_new(sc: SlashContext) -> str | None:
+    title = sc.arg or "Interactive session"
+    new_chat = await sc.ctx.chat_repo.create_chat(
+        tenant_id=sc.auth.tenant_key,
+        user_id=sc.auth.user_id,
         title=title,
     )
-    console.print(f"[bold green]New chat:[/bold green] {new_chat.id[:12]}… — {title}\n")
+    sc.console.print(f"[bold green]New chat:[/bold green] {new_chat.id[:12]}… — {title}\n")
     return new_chat.id
 
 
-async def _cmd_history(ctx, _arg: str, current_chat_id: str, _auth) -> str | None:
-    messages = await ctx.chat_repo.get_messages(current_chat_id, limit=20)
+async def _cmd_history(sc: SlashContext) -> str | None:
+    messages = await sc.ctx.chat_repo.get_messages(sc.current_chat_id, limit=20)
     if not messages:
-        console.print("[dim]No messages yet.[/dim]\n")
+        sc.console.print("[dim]No messages yet.[/dim]\n")
     else:
         for msg in messages:
             if msg.role == "user":
-                console.print(f"  [cyan]You:[/cyan] {msg.content[:80]}")
+                sc.console.print(f"  [cyan]You:[/cyan] {msg.content[:80]}")
             elif msg.role == "assistant":
-                console.print(f"  [green]Asst:[/green] {msg.content[:80]}")
-        console.print()
+                sc.console.print(f"  [green]Asst:[/green] {msg.content[:80]}")
+        sc.console.print()
     return None
 
 
-async def _cmd_rename(ctx, arg: str, current_chat_id: str, _auth) -> str | None:
-    if not arg:
-        console.print("[red]Usage: /rename <new title>[/red]")
+async def _cmd_rename(sc: SlashContext) -> str | None:
+    if not sc.arg:
+        sc.console.print("[red]Usage: /rename <new title>[/red]")
         return None
-    await ctx.chat_repo.update_title(current_chat_id, arg)
-    console.print(f"[bold]Renamed:[/bold] {arg}\n")
+    await sc.ctx.chat_repo.update_title(sc.current_chat_id, sc.arg)
+    sc.console.print(f"[bold]Renamed:[/bold] {sc.arg}\n")
     return None
 
 
-# Handler signature: (ctx, arg, current_chat_id, auth) -> new_chat_id or None
-_SLASH_COMMANDS: dict[str, Any] = {
-    "/list": _cmd_list,
-    "/switch": _cmd_switch,
-    "/new": _cmd_new,
-    "/history": _cmd_history,
-    "/rename": _cmd_rename,
-}
+# Built-in slash commands registered at import time.  We guard against
+# double-registration (happens under ``importlib.reload`` and in some
+# pytest collection modes) by first clearing our own entries from the
+# registry — integrator-added commands under different names are kept.
+_BUILTIN_SLASH_COMMANDS: tuple[tuple[str, Any, str], ...] = (
+    ("/list", _cmd_list, "List chats"),
+    ("/switch", _cmd_switch, "Switch to another chat (by prefix)"),
+    ("/new", _cmd_new, "Create a new chat"),
+    ("/history", _cmd_history, "Show recent messages"),
+    ("/rename", _cmd_rename, "Rename the current chat"),
+)
 
 
-async def _dispatch_slash_command(ctx, cmd: str, arg: str, current_chat_id: str, auth) -> str | None:
-    """Dispatch a slash command. Returns new chat_id if changed, else None."""
-    handler = _SLASH_COMMANDS.get(cmd)
-    if handler:
-        return await handler(ctx, arg, current_chat_id, auth)
-    console.print(f"[red]Unknown command: {cmd}[/red]")
-    return None
+def _register_builtin_slash_commands() -> None:
+    """Register the chat module's built-in slash commands (idempotent).
+
+    Calling this twice is a no-op — each ``register_slash_command`` call
+    replaces the prior entry for that name, so the final state is the
+    same regardless of how many times the chat module is imported.
+    """
+    for name, handler, help_text in _BUILTIN_SLASH_COMMANDS:
+        register_slash_command(name, handler, help=help_text)
+
+
+_register_builtin_slash_commands()
+
+
+async def _dispatch_slash_command(
+    ctx,
+    cmd: str,
+    arg: str,
+    current_chat_id: str,
+    auth,
+) -> str | None:
+    """Dispatch a slash command via the registry. Returns new chat_id if changed, else None."""
+    entry = get_slash_command(cmd)
+    if entry is None:
+        console.print(f"[red]Unknown command: {cmd}[/red]")
+        return None
+    sc = SlashContext(
+        ctx=ctx,
+        arg=arg,
+        current_chat_id=current_chat_id,
+        auth=auth,
+        console=console,
+    )
+    return await entry.handler(sc)
 
 
 # ── Interactive REPL ────────────────────────────────────────
@@ -353,7 +389,8 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
 
         console.print()
         console.print("[bold]Orchid Interactive Chat[/bold]")
-        console.print("Commands: /quit, /switch <id>, /list, /new [title], /history, /rename <title>")
+        registered = ", ".join(entry.name for entry in list_slash_commands())
+        console.print(f"Commands: /quit, {registered}")
         console.print()
 
         current_chat_id = resolved_id
@@ -542,8 +579,9 @@ async def _stream_graph(
                 sys.stdout.write(content)
                 sys.stdout.flush()
 
-    # Newline after streaming completes
-    print()
+    # Newline after streaming completes.  Goes through ``console`` (not
+    # ``print``) so tests can capture it and Rich handles TTY detection.
+    console.print()
 
     full_response = "".join(full_parts) or "No response generated."
     return full_response, sorted(seen_agents)
