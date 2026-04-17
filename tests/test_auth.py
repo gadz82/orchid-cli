@@ -8,11 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from orchid_cli.auth.config import OAuthProviderConfig, discover_oidc_endpoints, load_oauth_config
-from orchid_cli.auth.flow import (
-    _generate_code_challenge,
-    _generate_code_verifier,
-)
 from orchid_cli.auth.middleware import _DEV_AUTH, get_auth_context
+from orchid_cli.auth.pkce import generate_code_challenge, generate_code_verifier
 from orchid_cli.auth.token_store import StoredToken, delete_token, load_token, save_token
 
 
@@ -28,13 +25,7 @@ class TestLoadOAuthConfig:
 
     def test_returns_none_when_dev_bypass_true(self, tmp_path):
         cfg_file = tmp_path / "orchid.yml"
-        cfg_file.write_text(
-            "auth:\n"
-            "  dev_bypass: true\n"
-            "  cli:\n"
-            "    client_id: test\n"
-            "    issuer: https://example.com\n"
-        )
+        cfg_file.write_text("auth:\n  dev_bypass: true\n  cli:\n    client_id: test\n    issuer: https://example.com\n")
         assert load_oauth_config(str(cfg_file)) is None
 
     def test_returns_none_when_no_cli_section(self, tmp_path):
@@ -44,12 +35,7 @@ class TestLoadOAuthConfig:
 
     def test_returns_none_when_no_client_id(self, tmp_path):
         cfg_file = tmp_path / "orchid.yml"
-        cfg_file.write_text(
-            "auth:\n"
-            "  dev_bypass: false\n"
-            "  cli:\n"
-            "    scopes: openid\n"
-        )
+        cfg_file.write_text("auth:\n  dev_bypass: false\n  cli:\n    scopes: openid\n")
         assert load_oauth_config(str(cfg_file)) is None
 
     def test_returns_config_with_explicit_endpoints(self, tmp_path):
@@ -77,11 +63,7 @@ class TestLoadOAuthConfig:
     def test_returns_config_with_oidc_issuer(self, tmp_path):
         cfg_file = tmp_path / "orchid.yml"
         cfg_file.write_text(
-            "auth:\n"
-            "  dev_bypass: false\n"
-            "  cli:\n"
-            "    client_id: my-app\n"
-            "    issuer: https://auth.example.com\n"
+            "auth:\n  dev_bypass: false\n  cli:\n    client_id: my-app\n    issuer: https://auth.example.com\n"
         )
         cfg = load_oauth_config(str(cfg_file))
         assert cfg is not None
@@ -92,12 +74,7 @@ class TestLoadOAuthConfig:
 
     def test_dev_bypass_string_true(self, tmp_path):
         cfg_file = tmp_path / "orchid.yml"
-        cfg_file.write_text(
-            "auth:\n"
-            "  dev_bypass: 'true'\n"
-            "  cli:\n"
-            "    client_id: test\n"
-        )
+        cfg_file.write_text("auth:\n  dev_bypass: 'true'\n  cli:\n    client_id: test\n")
         assert load_oauth_config(str(cfg_file)) is None
 
 
@@ -153,23 +130,23 @@ class TestDiscoverOIDCEndpoints:
 
 class TestPKCE:
     def test_code_verifier_length(self):
-        verifier = _generate_code_verifier()
+        verifier = generate_code_verifier()
         assert 43 <= len(verifier) <= 128
 
     def test_code_verifier_is_random(self):
-        v1 = _generate_code_verifier()
-        v2 = _generate_code_verifier()
+        v1 = generate_code_verifier()
+        v2 = generate_code_verifier()
         assert v1 != v2
 
     def test_code_challenge_is_deterministic(self):
         verifier = "test-verifier-12345678901234567890123456789012"
-        c1 = _generate_code_challenge(verifier)
-        c2 = _generate_code_challenge(verifier)
+        c1 = generate_code_challenge(verifier)
+        c2 = generate_code_challenge(verifier)
         assert c1 == c2
 
     def test_code_challenge_is_base64url(self):
-        verifier = _generate_code_verifier()
-        challenge = _generate_code_challenge(verifier)
+        verifier = generate_code_verifier()
+        challenge = generate_code_challenge(verifier)
         # Base64url: only alphanumeric, -, _
         assert all(c.isalnum() or c in "-_" for c in challenge)
         # No padding

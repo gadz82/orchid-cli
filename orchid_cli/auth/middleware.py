@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Awaitable, Callable
 
 import httpx
 
@@ -33,10 +34,23 @@ _DEV_AUTH = AuthContext(
 )
 
 
+# ── Injectable seams ─────────────────────────────────────────
+#
+# Default to the production dependencies; tests pass fakes that
+# bypass disk I/O and HTTP without monkey-patching three modules.
+
+TokenLoader = Callable[[str], "StoredToken | None"]
+TokenSaver = Callable[[str, "StoredToken"], None]
+TokenRefresher = Callable[[OAuthProviderConfig, StoredToken], Awaitable[StoredToken]]
+
+
 async def get_auth_context(
     config_path: str,
     *,
     oauth_config: OAuthProviderConfig | None = None,
+    token_loader: TokenLoader | None = None,
+    token_saver: TokenSaver | None = None,
+    token_refresher: TokenRefresher | None = None,
 ) -> AuthContext:
     """Build an ``AuthContext`` for the current CLI session.
 
@@ -44,13 +58,30 @@ async def get_auth_context(
       1. If OAuth is configured → load stored token, refresh if needed.
       2. If ``IdentityResolver`` is configured → enrich with tenant/user.
       3. Otherwise → return development fallback.
+
+    Parameters
+    ----------
+    token_loader, token_saver
+        Persistence seams.  Default to the on-disk ``~/.orchid/tokens.json``
+        implementation.
+    token_refresher
+        Async callable exchanging a refresh token for a fresh access
+        token.  Default calls the IdP's token endpoint via ``httpx``.
+        Override in tests to avoid real HTTP.
     """
+    # Resolve the seams lazily so module-level ``monkeypatch.setattr`` in
+    # tests still works — binding ``load_token``/``save_token`` as default
+    # argument values would freeze the reference at import time.
+    loader = token_loader if token_loader is not None else load_token
+    saver = token_saver if token_saver is not None else save_token
+    refresher = token_refresher or _refresh_token
+
     cfg = oauth_config or load_oauth_config(config_path)
     if cfg is None:
         logger.debug("[CLI Auth] No OAuth configured — using dev auth context")
         return _DEV_AUTH
 
-    token = load_token(cfg.client_id)
+    token = loader(cfg.client_id)
     if token is None:
         logger.warning("[CLI Auth] No stored token. Run 'orchid auth login' first. Falling back to dev auth.")
         return _DEV_AUTH
@@ -59,8 +90,8 @@ async def get_auth_context(
     if token.is_expired and token.is_refresh_available:
         try:
             cfg = await discover_oidc_endpoints(cfg)
-            token = await _refresh_token(cfg, token)
-            save_token(cfg.client_id, token)
+            token = await refresher(cfg, token)
+            saver(cfg.client_id, token)
             logger.info("[CLI Auth] Token refreshed successfully")
         except Exception as exc:
             logger.warning("[CLI Auth] Token refresh failed: %s. Run 'orchid auth login'.", exc)

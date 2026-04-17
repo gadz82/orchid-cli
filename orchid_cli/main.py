@@ -24,6 +24,7 @@ import logging
 import typer
 
 from .commands import auth, chat, config, index, mcp, skill
+from .slash_commands import load_slash_command_plugins
 
 logger = logging.getLogger(__name__)
 
@@ -46,31 +47,24 @@ app.add_typer(skill.app, name="skill")
 
 
 def _load_plugins() -> None:
-    """Discover and register CLI plugins from entry-point group ``orchid_cli.commands``."""
-    try:
-        from importlib.metadata import entry_points
+    """Discover and register CLI plugins from entry-point group ``orchid_cli.commands``.
 
-        eps = entry_points()
-        # Python 3.12+: eps.select(); 3.9-3.11: eps.get()
-        plugins = (
-            eps.select(group="orchid_cli.commands") if hasattr(eps, "select") else eps.get("orchid_cli.commands", [])
-        )
+    Each entry must resolve to a ``typer.Typer`` instance.  Individual
+    failures are logged and skipped; see
+    :func:`orchid_ai.plugins.iter_entry_point_plugins`.
+    """
+    from orchid_ai.plugins import iter_entry_point_plugins
 
-        for ep in plugins:
-            try:
-                plugin_app = ep.load()
-                if isinstance(plugin_app, typer.Typer):
-                    app.add_typer(plugin_app, name=ep.name)
-                    logger.info("[CLI] Loaded plugin command: %s", ep.name)
-                else:
-                    logger.warning("[CLI] Plugin '%s' is not a Typer app — skipping", ep.name)
-            except Exception as exc:
-                logger.warning("[CLI] Failed to load plugin '%s': %s", ep.name, exc)
-    except Exception:
-        pass  # importlib.metadata not available or no plugins — that's fine
+    for name, plugin_app in iter_entry_point_plugins("orchid_cli.commands", logger=logger):
+        if isinstance(plugin_app, typer.Typer):
+            app.add_typer(plugin_app, name=name)
+            logger.info("[CLI] Loaded plugin command: %s", name)
+        else:
+            logger.warning("[CLI] Plugin '%s' is not a Typer app — skipping", name)
 
 
 _load_plugins()
+load_slash_command_plugins()
 
 
 if __name__ == "__main__":
