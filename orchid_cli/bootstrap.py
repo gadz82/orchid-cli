@@ -1,9 +1,11 @@
 """
-Shared bootstrapping — load config, build graph, initialize persistence.
+CLI bootstrapping — thin adapter over :func:`orchid_ai.bootstrap.build_runtime`.
 
-Mirrors the lifespan logic from orchid-api but without FastAPI.
-SQLite storage is always initialized by default (no external DB required).
-MCP token storage shares the same SQLite database as chat persistence.
+All heavy wiring (reader, chat storage, MCP token store, checkpointer,
+runtime) lives in the shared library function so the three entry points
+(orchid-cli, orchid-api, ``OrchidClient``) stay in lock-step.  This module
+adds only CLI-specific concerns: an :class:`OrchidContext` dataclass and
+an async context manager for clean shutdown.
 """
 
 from __future__ import annotations
@@ -14,94 +16,47 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-from orchid_ai.config.loader import load_config
+from orchid_ai.bootstrap import BootstrapResult, build_runtime, teardown_runtime
 from orchid_ai.config.schema import AgentsConfig
 from orchid_ai.core.mcp import MCPTokenStore
-from orchid_ai.core.repository import VectorReader, VectorStoreAdmin
+from orchid_ai.core.repository import VectorReader
 from orchid_ai.graph.graph import build_graph
 from orchid_ai.persistence.base import ChatStorage
-from orchid_ai.persistence.factory import build_chat_storage
-from orchid_ai.persistence.mcp_token_factory import build_mcp_token_store
-from orchid_ai.rag.factory import build_reader
 from orchid_ai.runtime import OrchidRuntime
 
 logger = logging.getLogger(__name__)
 
-# ── YAML key → env var mapping (same as orchid-api/settings.py) ──────
-_YAML_TO_ENV: dict[tuple[str, str], str] = {
-    ("agents", "config_path"): "AGENTS_CONFIG_PATH",
-    ("llm", "model"): "LITELLM_MODEL",
-    ("llm", "ollama_api_base"): "OLLAMA_API_BASE",
-    ("llm", "groq_api_key"): "GROQ_API_KEY",
-    ("llm", "gemini_api_key"): "GEMINI_API_KEY",
-    ("llm", "anthropic_api_key"): "ANTHROPIC_API_KEY",
-    ("llm", "openai_api_key"): "OPENAI_API_KEY",
-    ("auth", "dev_bypass"): "DEV_AUTH_BYPASS",
-    ("auth", "identity_resolver_class"): "IDENTITY_RESOLVER_CLASS",
-    ("auth", "domain"): "AUTH_DOMAIN",
-    ("startup", "hook"): "STARTUP_HOOK",
-    ("rag", "vector_backend"): "VECTOR_BACKEND",
-    ("rag", "qdrant_url"): "QDRANT_URL",
-    ("rag", "embedding_model"): "EMBEDDING_MODEL",
-    ("rag", "openai_api_key"): "OPENAI_API_KEY",
-    ("rag", "gemini_api_key"): "GEMINI_API_KEY",
-    ("upload", "vision_model"): "VISION_MODEL",
-    ("upload", "namespace"): "UPLOAD_NAMESPACE",
-    ("upload", "max_size_mb"): "UPLOAD_MAX_SIZE_MB",
-    ("upload", "chunk_size"): "CHUNK_SIZE",
-    ("upload", "chunk_overlap"): "CHUNK_OVERLAP",
-    ("storage", "class"): "CHAT_STORAGE_CLASS",
-    ("storage", "dsn"): "CHAT_DB_DSN",
-    ("mcp", "catalog_url"): "MCP_CATALOG_URL",
-    ("mcp", "notifications_url"): "MCP_NOTIFICATIONS_URL",
-    ("tracing", "langsmith_tracing"): "LANGSMITH_TRACING",
-    ("tracing", "langsmith_api_key"): "LANGSMITH_API_KEY",
-    ("tracing", "langsmith_project"): "LANGSMITH_PROJECT",
-}
 
-
-def _apply_yaml_to_env(config_path: str) -> None:
-    """Parse orchid.yml and export values as env vars (if not already set).
-
-    Storage settings (class, dsn) are skipped — the CLI has its own
-    defaults (SQLite at ~/.orchid/chats.db) that are more appropriate
-    than Docker-oriented paths often found in orchid.yml.
-    """
-    try:
-        import yaml
-
-        with open(config_path) as f:
-            data = yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        logger.warning("[CLI] Config file %s not found — ignoring", config_path)
-        return
-
-    # Storage config in orchid.yml is typically Docker-oriented (e.g. /data/chats.db).
-    # The CLI defaults to ~/.orchid/chats.db which is always writable.
-    _SKIP_SECTIONS = {"storage"}
-
-    for section, body in data.items():
-        if not isinstance(body, dict) or section in _SKIP_SECTIONS:
-            continue
-        for key, value in body.items():
-            env_var = _YAML_TO_ENV.get((section, key))
-            if env_var and env_var not in os.environ:
-                os.environ[env_var] = str(value)
-
-    logger.debug("[CLI] Applied YAML config from %s", config_path)
-
-
-# Defaults — SQLite storage ships with orchid, no external DB needed
+# Public defaults — referenced by command modules (e.g. mcp, auth) that
+# want to honour the CLI's SQLite-first convention.
 DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.SQLiteChatStorage"
 DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
-
-
 DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.SQLiteMCPTokenStore"
+
+
+def apply_cli_config(config_path: str) -> None:
+    """Apply ``orchid.yml`` values to env vars, honouring the CLI's
+    ``skip_sections={"storage"}`` convention.
+
+    Call this explicitly at command entry points (before :func:`bootstrap`)
+    to make env-var mutation an obvious, visible step.  :func:`bootstrap`
+    still calls it internally — a second call is idempotent because
+    :func:`apply_yaml_to_env` only sets vars that are not already present.
+    """
+    from orchid_ai.config.yaml_env import apply_yaml_to_env
+
+    apply_yaml_to_env(config_path, skip_sections={"storage"})
 
 
 @dataclass
 class OrchidContext:
-    """Runtime context for CLI operations."""
+    """Runtime context for CLI operations.
+
+    Pair :func:`bootstrap` with :meth:`release_resources` (or use the
+    :func:`cli_context` async context manager, which does it for you)
+    to ensure aiosqlite / checkpointer / token-store connections are
+    closed cleanly before the event loop exits.
+    """
 
     graph: Any
     reader: VectorReader
@@ -110,6 +65,22 @@ class OrchidContext:
     model: str
     mcp_token_store: MCPTokenStore | None = None
     runtime: OrchidRuntime = field(default_factory=OrchidRuntime)
+    # Private handle on the library-level ``BootstrapResult`` used by
+    # :meth:`release_resources`.  Not part of the public API.
+    _bootstrap: BootstrapResult | None = None
+
+    async def release_resources(self) -> None:
+        """Release every library-level resource this context holds.
+
+        Idempotent: safe to call twice; the underlying ``BootstrapResult``
+        is cleared after the first call so subsequent invocations are
+        no-ops.  Typically called from :func:`cli_context` on context
+        exit — explicit callers of :func:`bootstrap` must invoke this
+        themselves.
+        """
+        if self._bootstrap is not None:
+            await teardown_runtime(self._bootstrap)
+            self._bootstrap = None
 
 
 async def bootstrap(
@@ -122,79 +93,44 @@ async def bootstrap(
     chat_storage_class: str = "",
     chat_db_dsn: str = "",
 ) -> OrchidContext:
+    """Load config, build reader, build graph — return a ready-to-use context.
+
+    The CLI's SQLite-first defaults (``~/.orchid/chats.db``) win over any
+    ``storage:`` block in ``orchid.yml``; the CLI is typically run outside
+    Docker where the YAML's container paths would be wrong.
     """
-    Load config, build reader, build graph — return a ready-to-use context.
-
-    Chat storage is always initialized (defaults to SQLite at ~/.orchid/chats.db).
-    """
-    # Apply YAML config to environment — mirrors orchid-api/settings.py:_apply_yaml_config()
-    if config_path:
-        os.environ.setdefault("ORCHID_CONFIG", config_path)
-        _apply_yaml_to_env(config_path)
-
-    # Load YAML agent config
-    agents_config_path = os.environ.get("AGENTS_CONFIG_PATH", "agents.yaml")
-    agents_config = load_config(agents_config_path)
-
-    # Resolve defaults from env
-    resolved_model = model or os.environ.get("LITELLM_MODEL", "ollama/llama3.2")
-    resolved_backend = vector_backend or os.environ.get("VECTOR_BACKEND", "qdrant")
-    resolved_qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "http://qdrant:6333")
-    resolved_embedding = embedding_model or os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
-
-    # Build reader
-    reader = build_reader(
-        vector_backend=resolved_backend,
-        qdrant_url=resolved_qdrant_url,
-        embedding_model=resolved_embedding,
+    # CLI convention: storage block in YAML does NOT override our SQLite
+    # default.  Everything else in YAML → env propagates as usual.
+    result = await build_runtime(
+        config_path=config_path,
+        apply_yaml=bool(config_path),
+        skip_yaml_sections={"storage"},
+        model=model,
+        vector_backend=vector_backend,
+        qdrant_url=qdrant_url,
+        embedding_model=embedding_model,
+        chat_storage_class=chat_storage_class,
+        chat_db_dsn=chat_db_dsn,
     )
 
-    # Ensure collections
-    if isinstance(reader, VectorStoreAdmin):
-        namespaces = [a.rag.namespace for a in agents_config.agents.values() if a.rag.enabled and a.rag.namespace]
-        if namespaces:
-            await reader.ensure_collections([*namespaces, "uploads"])
-
-    # Chat persistence — always initialized, defaults to SQLite
-    resolved_storage_class = chat_storage_class or os.environ.get("CHAT_STORAGE_CLASS", "") or DEFAULT_STORAGE_CLASS
-    resolved_dsn = chat_db_dsn or os.environ.get("CHAT_DB_DSN", "") or DEFAULT_STORAGE_DSN
-    chat_repo = build_chat_storage(class_path=resolved_storage_class, dsn=resolved_dsn)
-    await chat_repo.init_db()
-
-    # MCP OAuth token storage — shares the same SQLite DB as chat persistence
-    mcp_token_store = build_mcp_token_store(
-        class_path=DEFAULT_TOKEN_STORE_CLASS,
-        dsn=resolved_dsn,  # same DB file as chat storage
-    )
-    await mcp_token_store.init_db()
-
-    # Build graph
-    runtime = OrchidRuntime(
-        default_model=resolved_model,
-        reader=reader,
-        mcp_token_store=mcp_token_store,
-    )
-    graph = build_graph(
-        config=agents_config,
-        runtime=runtime,
-    )
+    graph = build_graph(config=result.config, runtime=result.runtime)
 
     logger.info(
-        "[CLI] Ready — model=%s, backend=%s, storage=%s, agents=%s",
-        resolved_model,
-        resolved_backend,
-        resolved_storage_class.rsplit(".", 1)[-1],
-        list(agents_config.agents.keys()),
+        "[CLI] Ready — model=%s, backend=%s, agents=%s",
+        result.runtime.default_model,
+        os.environ.get("VECTOR_BACKEND", "qdrant"),
+        list(result.config.agents.keys()),
     )
 
     return OrchidContext(
         graph=graph,
-        reader=reader,
-        chat_repo=chat_repo,
-        config=agents_config,
-        model=resolved_model,
-        mcp_token_store=mcp_token_store,
-        runtime=runtime,
+        reader=result.runtime.get_reader(),
+        chat_repo=result.chat_repo,
+        config=result.config,
+        model=result.runtime.default_model,
+        mcp_token_store=result.mcp_token_store,
+        runtime=result.runtime,
+        _bootstrap=result,
     )
 
 
@@ -205,6 +141,4 @@ async def cli_context(config_path: str, *, model: str = ""):
     try:
         yield ctx
     finally:
-        if ctx.mcp_token_store:
-            await ctx.mcp_token_store.close()
-        await ctx.chat_repo.close()
+        await ctx.release_resources()
