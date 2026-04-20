@@ -92,12 +92,18 @@ async def bootstrap(
     embedding_model: str = "",
     chat_storage_class: str = "",
     chat_db_dsn: str = "",
+    chat_extra_migrations_package: str | None = None,
 ) -> OrchidContext:
     """Load config, build reader, build graph — return a ready-to-use context.
 
     The CLI's SQLite-first defaults (``~/.orchid/chats.db``) win over any
     ``storage:`` block in ``orchid.yml``; the CLI is typically run outside
     Docker where the YAML's container paths would be wrong.
+
+    ``chat_extra_migrations_package`` forwards an integrator-supplied
+    migrations package to the shared ``build_runtime``.  When left
+    ``None`` the value is picked up from the ``CHAT_EXTRA_MIGRATIONS_PACKAGE``
+    env var.
     """
     # CLI convention: storage block in YAML does NOT override our SQLite
     # default.  Everything else in YAML → env propagates as usual.
@@ -111,6 +117,7 @@ async def bootstrap(
         embedding_model=embedding_model,
         chat_storage_class=chat_storage_class,
         chat_db_dsn=chat_db_dsn,
+        chat_extra_migrations_package=chat_extra_migrations_package,
     )
 
     graph = build_graph(config=result.config, runtime=result.runtime)
