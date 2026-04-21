@@ -20,6 +20,7 @@ from typing import Any, Optional
 import typer
 from langchain_core.messages import AIMessage, HumanMessage
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.table import Table
 
 from orchid_ai.core.state import OrchidAuthContext
@@ -165,7 +166,11 @@ async def _history(chat_id: str, limit: int, config_path: str, model: str) -> No
             if msg.role == "user":
                 console.print(f"[bold cyan]You:[/bold cyan] {msg.content}")
             elif msg.role == "assistant":
-                console.print(f"[bold green]Assistant:[/bold green] {msg.content}")
+                # Assistant replies may contain Markdown (bold, lists,
+                # fenced code); render them so the history view matches
+                # what the live interactive session showed.
+                console.print("[bold green]Assistant:[/bold green]")
+                console.print(Markdown(msg.content))
                 if msg.agents_used:
                     console.print(f"  [dim]Agents: {', '.join(msg.agents_used)}[/dim]")
             else:
@@ -240,7 +245,9 @@ async def _send(chat_id: str, message: str, config_path: str, model: str) -> Non
         response_text, agents_used = await _send_message(ctx, resolved_id, message, auth)
 
         console.print()
-        console.print(response_text)
+        # Render the final response as Markdown so ``**bold**``, lists, and
+        # fenced code blocks surface correctly in the terminal.
+        console.print(Markdown(response_text))
         if agents_used:
             console.print(f"\n[dim]Agents used: {', '.join(agents_used)}[/dim]")
 
@@ -419,8 +426,11 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
                     current_chat_id = result  # /switch and /new update the active chat
                 continue
 
-            # Send message (streaming in interactive mode for real-time output)
-            console.print("\n[bold green]Assistant:[/bold green] ", end="")
+            # Send message (streaming in interactive mode for real-time output).
+            # The header ends with a newline so ``rich.Live`` inside
+            # ``_stream_graph`` starts on its own line and can safely render
+            # Markdown without clobbering the label.
+            console.print("\n[bold green]Assistant:[/bold green]")
             response_text, agents_used = await _send_message(ctx, current_chat_id, stripped, auth, streaming=True)
             if agents_used:
                 console.print(f"  [dim]Agents: {', '.join(agents_used)}[/dim]")
@@ -556,34 +566,125 @@ async def _stream_graph(
     *,
     config: dict | None = None,
 ) -> tuple[str, list[str]]:
-    """Stream graph execution, printing tokens in real-time. Returns (full_response, agents_used)."""
-    import sys
+    """Stream graph execution with live Markdown rendering.
 
-    full_parts: list[str] = []
+    The supervisor node can be invoked **multiple times** in one graph
+    run — once for the initial routing decision (structured-output JSON),
+    once per inter-agent hop in a sequential skill, and finally once for
+    the user-facing synthesis.  Each invocation is a distinct LLM call
+    with its own ``message.id``.  The LAST coherent supervisor block
+    carries the synthesis; earlier blocks are internal plumbing the user
+    should never see.
+
+    Strategy
+    --------
+    * ``stream_mode=["messages", "values"]`` — the ``messages`` leg
+      gives token deltas; the ``values`` leg captures the supervisor's
+      ``final_response`` when it answers without dispatching agents.
+    * Group token deltas by ``message.id``.  When the id changes, the
+      accumulated buffer is discarded and the Live block is reset —
+      only the LATEST LLM call's output survives to the final render.
+    * Classify each new message by its FIRST non-empty chunk: if it
+      starts with ``{`` it's routing JSON and the whole message is
+      suppressed; if it starts with ``[Supervisor`` it's an internal
+      handoff marker and is likewise suppressed.
+    * Agent-node tokens are never rendered to the answer area; the
+      agent's activation IS shown as a dim status line above the Live
+      region so the user still sees which agent(s) handled the turn.
+    * The final text feeds a :class:`rich.live.Live` block wrapping a
+      :class:`rich.markdown.Markdown` so ``**bold**``, lists, and
+      fenced code render correctly as tokens arrive.
+
+    Returns
+    -------
+    (full_response, agents_used) : tuple[str, list[str]]
+        ``full_response`` is the final Markdown source (what the caller
+        persists to chat history).
+    """
+    from rich.live import Live
+    from rich.markdown import Markdown
+
     seen_agents: set[str] = set()
+    current_msg_id: str | None = None
+    current_msg_suppressed: bool = False
+    response_parts: list[str] = []
+    direct_final: str | None = None
 
-    async for msg, metadata in ctx.graph.astream(initial_state, config=config, stream_mode="messages"):
-        node = metadata.get("langgraph_node", "")
+    with Live(
+        Markdown(""),
+        console=console,
+        refresh_per_second=15,
+        vertical_overflow="visible",
+        transient=False,
+    ) as live:
+        async for mode, payload in ctx.graph.astream(
+            initial_state,
+            config=config,
+            stream_mode=["messages", "values"],
+        ):
+            # ── ``values`` events capture the full graph state.  We
+            # only need it for the supervisor's direct answer (no agent
+            # dispatched → no synthesis tokens to collect). ──
+            if mode == "values":
+                if isinstance(payload, dict):
+                    fr = payload.get("final_response")
+                    if fr:
+                        direct_final = fr
+                continue
 
-        # Track agents
-        if node.endswith("_agent"):
-            agent_name = node.removesuffix("_agent")
-            seen_agents.add(agent_name)
+            msg, metadata = payload
+            node = metadata.get("langgraph_node", "")
+            content = getattr(msg, "content", "")
 
-        # Print tokens from LLM responses (not tool calls)
-        content = getattr(msg, "content", "")
-        if content and isinstance(content, str):
-            tool_calls = getattr(msg, "tool_calls", None)
-            if not tool_calls:
-                full_parts.append(content)
-                sys.stdout.write(content)
-                sys.stdout.flush()
+            if not content or not isinstance(content, str):
+                continue
+            if getattr(msg, "tool_calls", None):
+                continue
 
-    # Newline after streaming completes.  Goes through ``console`` (not
-    # ``print``) so tests can capture it and Rich handles TTY detection.
-    console.print()
+            # ── Agent node: one-time dim status, swallow the tokens. ──
+            if node.endswith("_agent"):
+                agent_name = node.removesuffix("_agent")
+                if agent_name not in seen_agents:
+                    seen_agents.add(agent_name)
+                    # ``console.print`` inside Live routes the output
+                    # above the managed region, so status lines stay
+                    # visible alongside the final rendered answer.
+                    console.print(f"[dim italic]↳ {agent_name} agent working…[/dim italic]")
+                continue
 
-    full_response = "".join(full_parts) or "No response generated."
+            if node != "supervisor":
+                continue
+
+            # ── New supervisor LLM call?  Reset the buffer so any
+            # previous routing / inter-agent-handoff output is dropped,
+            # and classify this message by its first non-empty chunk. ──
+            msg_id = getattr(msg, "id", None)
+            if msg_id != current_msg_id:
+                current_msg_id = msg_id
+                response_parts = []
+                live.update(Markdown(""))
+
+                first = content.lstrip()
+                current_msg_suppressed = (
+                    # Routing JSON (structured-output Pydantic).
+                    first.startswith("{")
+                    # Internal handoff marker like ``[Supervisor → menu]``.
+                    or content.startswith("[Supervisor")
+                )
+
+            if current_msg_suppressed:
+                continue
+
+            response_parts.append(content)
+            live.update(Markdown("".join(response_parts)))
+
+        # ── Direct-response fallback (supervisor answered without
+        # dispatching any agent, so no synthesis tokens arrived). ──
+        if not response_parts and direct_final:
+            response_parts.append(direct_final)
+            live.update(Markdown(direct_final))
+
+    full_response = "".join(response_parts).strip() or "No response generated."
     return full_response, sorted(seen_agents)
 
 
