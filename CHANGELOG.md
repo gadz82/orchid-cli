@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.3 (2026-04-21)
+
+### Bug Fixes
+
+- Reformatting answer
+  ([`79e7866`](https://github.com/gadz82/orchid-cli/commit/79e7866b33bd0a265d1b117aece4ba549be6fcff))
+
+
 ## v1.1.2 (2026-04-21)
 
 ### Bug Fixes
