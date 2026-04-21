@@ -22,7 +22,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from rich.console import Console
 from rich.table import Table
 
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.state import OrchidAuthContext
 
 from ..auth.middleware import get_auth_context
 from ..bootstrap import cli_context
@@ -433,7 +433,7 @@ async def _interactive(chat_id: str | None, config_path: str, model: str) -> Non
 
 
 async def _send_message(
-    ctx, chat_id: str, message: str, auth: AuthContext, *, streaming: bool = False
+    ctx, chat_id: str, message: str, auth: OrchidAuthContext, *, streaming: bool = False
 ) -> tuple[str, list[str]]:
     """Send a message through the graph, persist to storage, return (response, agents_used)."""
     # Load history
@@ -587,7 +587,7 @@ async def _stream_graph(
     return full_response, sorted(seen_agents)
 
 
-async def _resolve_chat_id(ctx, chat_id_prefix: str, auth: AuthContext) -> str | None:
+async def _resolve_chat_id(ctx, chat_id_prefix: str, auth: OrchidAuthContext) -> str | None:
     """Resolve a chat ID prefix to a full ID. Prints error if not found."""
     # Try exact match first
     chat = await ctx.chat_repo.get_chat(chat_id_prefix)

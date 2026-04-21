@@ -30,7 +30,7 @@ class StoredToken:
     refresh_token: str = ""
     expires_at: float = 0.0
     scopes: str = ""
-    # Identity fields (populated after IdentityResolver or userinfo call).
+    # Identity fields (populated after OrchidIdentityResolver or userinfo call).
     tenant_key: str = ""
     user_id: str = ""
     extra: dict[str, str] = field(default_factory=dict)

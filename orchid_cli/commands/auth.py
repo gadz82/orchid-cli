@@ -157,7 +157,7 @@ def _print_token_info(token: StoredToken) -> None:
 
 
 async def _resolve_and_store_identity(cfg, token: StoredToken) -> None:
-    """Try to resolve identity via IdentityResolver and persist the result."""
+    """Try to resolve identity via OrchidIdentityResolver and persist the result."""
     import httpx
 
     from orchid_ai.utils import import_class

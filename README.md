@@ -245,7 +245,7 @@ auth:
 rag:
   vector_backend: null      # no Qdrant needed for basic usage
 storage:
-  class: orchid_ai.persistence.sqlite.SQLiteChatStorage
+  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
   dsn: ~/.orchid/chats.db
 
 # LangGraph checkpointer (optional) — enables persistent graph state,
@@ -261,7 +261,7 @@ checkpointer:
 |-----------|---------|-------------|
 | LLM model | `ollama/llama3.2` | `LITELLM_MODEL` |
 | Vector backend | `qdrant` | `VECTOR_BACKEND` |
-| Storage class | `orchid_ai.persistence.sqlite.SQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
+| Storage class | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
 | Checkpointer | disabled | `CHECKPOINTER_TYPE` / `CHECKPOINTER_DSN` |
 | Token storage | `~/.orchid/tokens.json` | — |
@@ -310,7 +310,7 @@ When the access token expires and a refresh token is available, the CLI refreshe
 
 ### Identity Resolution
 
-When `identity_resolver_class` is configured, the CLI calls the resolver after login to populate `tenant_key` and `user_id` from the OAuth token. These identity fields are cached in the token file so subsequent commands don't need the resolver. See the [orchid IdentityResolver ABC](../orchid/orchid_ai/core/identity.py) for the interface.
+When `identity_resolver_class` is configured, the CLI calls the resolver after login to populate `tenant_key` and `user_id` from the OAuth token. These identity fields are cached in the token file so subsequent commands don't need the resolver. See the [orchid OrchidIdentityResolver ABC](../orchid/orchid_ai/core/identity.py) for the interface.
 
 ### Dev Fallback
 
@@ -356,7 +356,7 @@ orchid_cli/
     oidc.py        Shared OIDC discovery utility
     flow.py        Authorization Code + PKCE flow (browser, localhost callback)
     token_store.py Secure token persistence (~/.orchid/tokens.json)
-    middleware.py  Token refresh + AuthContext builder
+    middleware.py  Token refresh + OrchidAuthContext builder
     pkce.py        PKCE code verifier/challenge helpers
   commands/
     auth.py        login, logout, status subcommands

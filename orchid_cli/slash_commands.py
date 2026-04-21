@@ -33,7 +33,7 @@ REPL is pointing at (``/switch``, ``/new``), otherwise ``None``.
 
 The handler receives everything it might reasonably need through the
 :class:`SlashContext` — the graph context, the parsed argument string,
-the active chat_id, the resolved :class:`AuthContext`, and a
+the active chat_id, the resolved :class:`OrchidAuthContext`, and a
 ``rich.console.Console`` for output.  New fields can be added in the
 future without breaking existing handlers.
 """
@@ -54,10 +54,10 @@ logger = logging.getLogger(__name__)
 class SlashContext:
     """Everything a slash-command handler might need, in one typed bag."""
 
-    ctx: Any  # OrchidContext — not imported here to avoid a cycle
+    ctx: Any  # Orchid — not imported here to avoid a cycle
     arg: str
     current_chat_id: str
-    auth: Any  # AuthContext — same reason
+    auth: Any  # OrchidAuthContext — same reason
     console: Any  # rich.console.Console
 
 

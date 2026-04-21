@@ -18,12 +18,12 @@ from rich.console import Console
 
 from orchid_ai.config.loader import load_config
 from orchid_ai.config.schema import (
-    AgentConfig,
-    AgentsConfig,
-    BuiltinToolConfig,
-    GuardrailRuleConfig,
-    GuardrailsConfig,
-    OrchestratorSkillConfig,
+    OrchidAgentConfig,
+    OrchidAgentsConfig,
+    OrchidBuiltinToolConfig,
+    OrchidGuardrailRuleConfig,
+    OrchidGuardrailsConfig,
+    OrchidOrchestratorSkillConfig,
 )
 from orchid_ai.config.tool_registry import (
     load_tools_from_config,
@@ -109,8 +109,8 @@ def generate(
 def _generate_agent_skill(
     skill_dir: Path,
     agent_name: str,
-    agent_cfg: AgentConfig,
-    config: AgentsConfig,
+    agent_cfg: OrchidAgentConfig,
+    config: OrchidAgentsConfig,
 ) -> None:
     """Generate a Claude Code skill directory for one Orchid agent."""
     skill_dir.mkdir(parents=True, exist_ok=True)
@@ -125,8 +125,8 @@ def _generate_agent_skill(
 
 def _build_agent_skill_md(
     agent_name: str,
-    agent_cfg: AgentConfig,
-    config: AgentsConfig,
+    agent_cfg: OrchidAgentConfig,
+    config: OrchidAgentsConfig,
     tool_scripts: dict[str, _ToolScriptInfo],
 ) -> str:
     """Build the SKILL.md content for an Orchid agent."""
@@ -240,8 +240,8 @@ def _build_agent_skill_md(
 def _generate_orchestrator_skill(
     skill_dir: Path,
     skill_name: str,
-    skill_cfg: OrchestratorSkillConfig,
-    config: AgentsConfig,
+    skill_cfg: OrchidOrchestratorSkillConfig,
+    config: OrchidAgentsConfig,
 ) -> None:
     """Generate a Claude Code skill directory for an Orchid orchestrator skill."""
     skill_dir.mkdir(parents=True, exist_ok=True)
@@ -252,8 +252,8 @@ def _generate_orchestrator_skill(
 
 def _build_orchestrator_skill_md(
     skill_name: str,
-    skill_cfg: OrchestratorSkillConfig,
-    config: AgentsConfig,
+    skill_cfg: OrchidOrchestratorSkillConfig,
+    config: OrchidAgentsConfig,
 ) -> str:
     """Build the SKILL.md content for an Orchid orchestrator skill."""
     parts: list[str] = []
@@ -322,8 +322,8 @@ class _ToolScriptInfo:
 
 def _generate_tool_scripts(
     skill_dir: Path,
-    agent_cfg: AgentConfig,
-    config: AgentsConfig,
+    agent_cfg: OrchidAgentConfig,
+    config: OrchidAgentsConfig,
 ) -> dict[str, _ToolScriptInfo]:
     """Generate executable Python scripts for each built-in tool.
 
@@ -346,7 +346,7 @@ def _generate_tool_scripts(
     _ensure_tools_registered(config)
 
     # Group tools by source module path
-    module_tools: dict[str, list[tuple[str, BuiltinToolConfig]]] = {}
+    module_tools: dict[str, list[tuple[str, OrchidBuiltinToolConfig]]] = {}
     for tool_name in tool_names:
         tool_cfg = config.tools.get(tool_name)
         if not tool_cfg:
@@ -395,7 +395,7 @@ def _generate_tool_scripts(
     return result
 
 
-def _ensure_tools_registered(config: AgentsConfig) -> None:
+def _ensure_tools_registered(config: OrchidAgentsConfig) -> None:
     """Ensure all built-in tools are loaded into the registry."""
     if config.tools and not list_tools():
         try:
@@ -444,7 +444,7 @@ def _build_usage_hint(func_name: str, params: dict[str, str]) -> str:
     return f"{func_name} {args}"
 
 
-def _build_cli_wrapper(tools_in_module: list[tuple[str, BuiltinToolConfig]]) -> str:
+def _build_cli_wrapper(tools_in_module: list[tuple[str, OrchidBuiltinToolConfig]]) -> str:
     """Build a __main__ CLI wrapper that dispatches to tool functions."""
     func_entries: list[tuple[str, str]] = []  # (tool_name, func_name)
     for tool_name, tool_cfg in tools_in_module:
@@ -513,8 +513,8 @@ def _build_cli_wrapper(tools_in_module: list[tuple[str, BuiltinToolConfig]]) -> 
 
 
 def _build_guardrails_section(
-    global_guardrails: GuardrailsConfig,
-    agent_guardrails: GuardrailsConfig | None,
+    global_guardrails: OrchidGuardrailsConfig,
+    agent_guardrails: OrchidGuardrailsConfig | None,
     agent_name: str | None,
 ) -> str:
     """Build the ## Guardrails section for a SKILL.md file.
@@ -538,8 +538,8 @@ def _build_guardrails_section(
     )
 
     # Collect input and output rules separately
-    input_rules: list[GuardrailRuleConfig] = list(global_guardrails.input)
-    output_rules: list[GuardrailRuleConfig] = list(global_guardrails.output)
+    input_rules: list[OrchidGuardrailRuleConfig] = list(global_guardrails.input)
+    output_rules: list[OrchidGuardrailRuleConfig] = list(global_guardrails.output)
 
     if agent_guardrails is not None:
         input_rules.extend(agent_guardrails.input)
@@ -562,7 +562,7 @@ def _build_guardrails_section(
     return "\n".join(parts)
 
 
-def _format_guardrail_rule(rule: GuardrailRuleConfig) -> str:
+def _format_guardrail_rule(rule: OrchidGuardrailRuleConfig) -> str:
     """Format a single guardrail rule as a readable bullet point."""
     action_labels = {
         "block": "**Block** the message",

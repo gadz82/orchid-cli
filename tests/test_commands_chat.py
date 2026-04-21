@@ -1,14 +1,15 @@
 """Tests for orchid_cli.commands.chat — chat CRUD and messaging helpers."""
+
 from __future__ import annotations
 
 import pytest
 
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.state import OrchidAuthContext
 
 from orchid_cli.commands.chat import _resolve_chat_id, _send_message
 
 # Shared test auth context — matches the legacy _CLI_AUTH defaults.
-_TEST_AUTH = AuthContext(access_token="cli-token", tenant_key="cli", user_id="cli-user")
+_TEST_AUTH = OrchidAuthContext(access_token="cli-token", tenant_key="cli", user_id="cli-user")
 
 
 # ── _resolve_chat_id ───────────────────────────────────────
