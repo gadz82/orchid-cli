@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-04-21)
+
+### Bug Fixes
+
+- Bump orchid-ai dependency to >=1.3.2 in CLI and API
+  ([`2a20470`](https://github.com/gadz82/orchid-cli/commit/2a20470894399b42c26fefa738bc2a6dda81497c))
+
+- **cli**: Add support for extra chat migrations package
+  ([`56f73a9`](https://github.com/gadz82/orchid-cli/commit/56f73a9bcae8362c8425c6541c545be5d8858d5b))
+
+
 ## v1.1.0 (2026-04-17)
 
 ### Continuous Integration
