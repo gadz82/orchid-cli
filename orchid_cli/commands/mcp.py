@@ -20,8 +20,8 @@ from rich.console import Console
 from rich.table import Table
 
 from orchid_ai.config.loader import load_config
-from orchid_ai.core.mcp import MCPTokenRecord
-from orchid_ai.mcp.auth_registry import MCPAuthRegistry
+from orchid_ai.core.mcp import OrchidMCPTokenRecord
+from orchid_ai.mcp.auth_registry import OrchidMCPAuthRegistry
 from orchid_ai.persistence.mcp_token_factory import build_mcp_token_store
 
 from ..auth.middleware import get_auth_context
@@ -45,7 +45,7 @@ console = Console()
 # ── Config helpers ──────────────────────────────────────────────
 
 
-def _load_registry(config_path: str) -> MCPAuthRegistry:
+def _load_registry(config_path: str) -> OrchidMCPAuthRegistry:
     """Load agents config and build the auth registry."""
     import yaml
 
@@ -59,7 +59,7 @@ def _load_registry(config_path: str) -> MCPAuthRegistry:
             pass
 
     agents_config = load_config(agents_config_path)
-    return MCPAuthRegistry.from_config(agents_config)
+    return OrchidMCPAuthRegistry.from_config(agents_config)
 
 
 async def _discover_oidc_endpoints(issuer: str) -> dict[str, str]:
@@ -89,10 +89,10 @@ def _build_token_record(
     auth: Any,
     scopes: str,
     flow_result: PKCEFlowResult,
-) -> MCPTokenRecord:
-    """Build an ``MCPTokenRecord`` from a successful PKCE flow result."""
+) -> OrchidMCPTokenRecord:
+    """Build an ``OrchidMCPTokenRecord`` from a successful PKCE flow result."""
     now = time.time()
-    return MCPTokenRecord(
+    return OrchidMCPTokenRecord(
         server_name=server_name,
         tenant_id=auth.tenant_key,
         user_id=auth.user_id,
@@ -166,7 +166,7 @@ async def _perform_mcp_oauth_flow(
 
 async def _auto_authorize_servers(
     server_names: list[str],
-    registry: MCPAuthRegistry,
+    registry: OrchidMCPAuthRegistry,
     auth: Any,
     store: Any,
     *,

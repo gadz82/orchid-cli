@@ -1,11 +1,11 @@
 """
-Auth middleware — resolves the current CLI session into an ``AuthContext``.
+Auth middleware — resolves the current CLI session into an ``OrchidAuthContext``.
 
 Responsibilities:
   1. Load stored token from disk.
   2. Refresh if expired (using the refresh_token grant).
-  3. Build an ``AuthContext`` for graph injection.
-  4. Optionally enrich via ``IdentityResolver`` (if configured).
+  3. Build an ``OrchidAuthContext`` for graph injection.
+  4. Optionally enrich via ``OrchidIdentityResolver`` (if configured).
 
 When no OAuth is configured (``auth.dev_bypass: true`` or no ``auth.cli``
 section), returns a fallback dummy context for local development.
@@ -19,7 +19,7 @@ from typing import Awaitable, Callable
 
 import httpx
 
-from orchid_ai.core.state import AuthContext
+from orchid_ai.core.state import OrchidAuthContext
 
 from .config import OAuthProviderConfig, discover_oidc_endpoints, load_oauth_config
 from .token_store import StoredToken, load_token, save_token
@@ -27,7 +27,7 @@ from .token_store import StoredToken, load_token, save_token
 logger = logging.getLogger(__name__)
 
 # Fallback context for dev/local use (matches legacy behaviour).
-_DEV_AUTH = AuthContext(
+_DEV_AUTH = OrchidAuthContext(
     access_token="cli-token",
     tenant_key="cli",
     user_id="cli-user",
@@ -51,12 +51,12 @@ async def get_auth_context(
     token_loader: TokenLoader | None = None,
     token_saver: TokenSaver | None = None,
     token_refresher: TokenRefresher | None = None,
-) -> AuthContext:
-    """Build an ``AuthContext`` for the current CLI session.
+) -> OrchidAuthContext:
+    """Build an ``OrchidAuthContext`` for the current CLI session.
 
     Resolution order:
       1. If OAuth is configured → load stored token, refresh if needed.
-      2. If ``IdentityResolver`` is configured → enrich with tenant/user.
+      2. If ``OrchidIdentityResolver`` is configured → enrich with tenant/user.
       3. Otherwise → return development fallback.
 
     Parameters
@@ -101,15 +101,15 @@ async def get_auth_context(
         logger.warning("[CLI Auth] Token expired and no refresh token. Run 'orchid auth login'.")
         return _DEV_AUTH
 
-    # Build AuthContext — use stored identity if available.
-    auth = AuthContext(
+    # Build OrchidAuthContext — use stored identity if available.
+    auth = OrchidAuthContext(
         access_token=token.access_token,
         tenant_key=token.tenant_key or "default",
         user_id=token.user_id or "cli-user",
         expires_at=token.expires_at,
     )
 
-    # Optionally resolve identity via IdentityResolver.
+    # Optionally resolve identity via OrchidIdentityResolver.
     if cfg.identity_resolver_class and (not token.tenant_key or not token.user_id):
         auth = await _resolve_identity(cfg, token, auth)
 
@@ -154,9 +154,9 @@ async def _refresh_token(
 async def _resolve_identity(
     config: OAuthProviderConfig,
     token: StoredToken,
-    auth: AuthContext,
-) -> AuthContext:
-    """Optionally enrich AuthContext via the configured IdentityResolver.
+    auth: OrchidAuthContext,
+) -> OrchidAuthContext:
+    """Optionally enrich OrchidAuthContext via the configured OrchidIdentityResolver.
 
     This allows the CLI to populate ``tenant_key`` and ``user_id``
     from the OAuth token, just like orchid-api does at request time.

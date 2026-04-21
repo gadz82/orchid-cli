@@ -37,11 +37,11 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from orchid_ai.core.repository import Document, VectorWriter
+from orchid_ai.core.repository import Document, OrchidVectorWriter
 from orchid_ai.documents.chunker import ChunkConfig
 from orchid_ai.documents.pipeline import ingest_document
 from orchid_ai.rag.indexer import StaticIndexer
-from orchid_ai.rag.scopes import SHARED_TENANT, RAGScope
+from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +90,12 @@ def _build_metadata(
     return meta
 
 
-async def _require_writer(ctx) -> VectorWriter:
-    if not isinstance(ctx.reader, VectorWriter):
+async def _require_writer(ctx) -> OrchidVectorWriter:
+    reader = ctx.runtime.get_reader()
+    if not isinstance(reader, OrchidVectorWriter):
         console.print("[red]Error:[/red] Vector store does not support writing (backend may be 'null')")
         raise typer.Exit(code=1)
-    return ctx.reader
+    return reader
 
 
 # ── Command: seed (existing — kept for backward compat) ────────
@@ -168,7 +169,7 @@ async def _index_file(
 
     async with cli_context(config_path) as ctx:
         writer = await _require_writer(ctx)
-        scope_obj = RAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
+        scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
         chunk_cfg = ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
         console.print(f"[dim]Reading {file_path}...[/dim]")
@@ -259,7 +260,7 @@ async def _index_dir(
 
     async with cli_context(config_path) as ctx:
         writer = await _require_writer(ctx)
-        scope_obj = RAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
+        scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
         chunk_cfg = ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
         total_chunks = 0

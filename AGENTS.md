@@ -15,7 +15,7 @@ orchid-cli/
       config.py      OAuth provider settings from orchid.yml (OIDC discovery)
       flow.py        PKCE flow: browser login, localhost callback, code exchange
       token_store.py Secure token persistence (~/.orchid/tokens.json)
-      middleware.py   Token refresh + AuthContext builder
+      middleware.py   Token refresh + OrchidAuthContext builder
     commands/
       auth.py        login, logout, status subcommands
       chat.py        Full CRUD: create, list, delete, history, send, interactive, rename, share
@@ -44,15 +44,15 @@ orchid-cli/
 
 2. **`bootstrap.py` mirrors `orchid-api/main.py:lifespan()`.** Both load config, build the graph, and initialize storage. Keep them in sync when adding new startup steps.
 
-3. **`OrchidContext` dataclass holds runtime state.** Created once by `bootstrap()`, passed to commands. Contains: `graph`, `reader`, `chat_repo`, `config`, `model`.
+3. **Commands receive an `Orchid` instance.** `bootstrap()` now returns the framework's mandatory :class:`orchid_ai.Orchid` facade directly — there is no CLI-local `OrchidContext` wrapper.  Commands read `orchid.graph`, `orchid.chat_repo`, `orchid.config`, `orchid.runtime` (and `orchid.runtime.default_model` for the old `ctx.model`, `orchid.runtime.get_reader()` for the old `ctx.reader`).
 
 4. **Default storage is SQLite** at `~/.orchid/chats.db` (no Docker, no PostgreSQL needed). Overridable via `CHAT_STORAGE_CLASS` and `CHAT_DB_DSN` env vars.
 
-5. **No agent or framework code here.** No `BaseAgent` subclasses, no graph wiring, no RAG logic. Those belong in `orchid/` or consumer projects.
+5. **No agent or framework code here.** No `OrchidAgent` subclasses, no graph wiring, no RAG logic. Those belong in `orchid/` or consumer projects.
 
 6. **Config resolution:** CLI args > env vars > `orchid.yml` > hardcoded defaults.
 
-7. **OAuth auth is self-contained in `auth/`.** The `auth/` subpackage handles the full OAuth 2.0 Authorization Code + PKCE flow. No OAuth logic in `chat.py`, `bootstrap.py`, or any other module. Chat commands call `get_auth_context(config_path)` which returns either a real OAuth-backed `AuthContext` or the dev fallback — callers don't know or care which.
+7. **OAuth auth is self-contained in `auth/`.** The `auth/` subpackage handles the full OAuth 2.0 Authorization Code + PKCE flow. No OAuth logic in `chat.py`, `bootstrap.py`, or any other module. Chat commands call `get_auth_context(config_path)` which returns either a real OAuth-backed `OrchidAuthContext` or the dev fallback — callers don't know or care which.
 
 8. **Token storage at `~/.orchid/tokens.json`.** Permissions set to `0o600` (owner-only). Tokens are keyed by `client_id`, supporting multiple providers. Refresh tokens are used automatically when the access token expires.
 
@@ -114,7 +114,7 @@ Chat ID prefix matching is supported (type first few chars of UUID).
 | Vector backend | `qdrant` | `VECTOR_BACKEND` |
 | Qdrant URL | `http://qdrant:6333` | `QDRANT_URL` |
 | Embedding model | `text-embedding-3-small` | `EMBEDDING_MODEL` |
-| Storage class | `orchid_ai.persistence.sqlite.SQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
+| Storage class | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
 
 ## OAuth Configuration
@@ -124,7 +124,7 @@ OAuth is configured via the `auth.cli` section in `orchid.yml`. When absent or w
 ```yaml
 auth:
   dev_bypass: false
-  identity_resolver_class: myapp.identity.Resolver   # optional — enriches AuthContext
+  identity_resolver_class: myapp.identity.Resolver   # optional — enriches OrchidAuthContext
   domain: platform.example.com                        # optional — passed to resolver
 
   cli:

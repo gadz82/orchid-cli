@@ -32,9 +32,9 @@ class OAuthProviderConfig:
     scopes: str = "openid"
     # Optional OIDC issuer (informational after discovery).
     issuer: str = ""
-    # Optional identity resolver class (for enriching AuthContext).
+    # Optional identity resolver class (for enriching OrchidAuthContext).
     identity_resolver_class: str = ""
-    # Optional domain (passed to IdentityResolver.resolve).
+    # Optional domain (passed to OrchidIdentityResolver.resolve).
     domain: str = ""
 
 
