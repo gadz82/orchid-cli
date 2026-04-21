@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.2 (2026-04-21)
+
+### Bug Fixes
+
+- Missing mcp_token_store property accessor
+  ([`9d930c9`](https://github.com/gadz82/orchid-cli/commit/9d930c984d9710944c8e9aa62b378bfbd3c6e1e5))
+
+
 ## v1.1.1 (2026-04-21)
 
 ### Bug Fixes
