@@ -52,7 +52,7 @@ orchid-cli/
 
 6. **Config resolution:** CLI args > env vars > `orchid.yml` > hardcoded defaults.
 
-7. **OAuth auth is self-contained in `auth/`.** The `auth/` subpackage handles the full OAuth 2.0 Authorization Code + PKCE flow. No OAuth logic in `chat.py`, `bootstrap.py`, or any other module. Chat commands call `get_auth_context(config_path)` which returns either a real OAuth-backed `OrchidAuthContext` or the dev fallback — callers don't know or care which.
+7. **OAuth auth is self-contained in `auth/`.** The `auth/` subpackage handles the full OAuth 2.0 Authorization Code + PKCE flow. No OAuth logic in `chat.py`, `bootstrap.py`, or any other module. Chat commands call `get_auth_context(config_path)` which returns either a real OAuth-backed `OrchidAuthContext` or the dev fallback — callers don't know or care which. **The CLI is an independent OAuth client** — it runs its own dance against the upstream IdP and is NOT one of the downstream consumers covered by the [auth-centralisation roadmap](../.knowledge/auth-centralisation.md) (which targets the MCP gateway + Next.js frontends).
 
 8. **Token storage at `~/.orchid/tokens.json`.** Permissions set to `0o600` (owner-only). Tokens are keyed by `client_id`, supporting multiple providers. Refresh tokens are used automatically when the access token expires.
 

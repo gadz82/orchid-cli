@@ -312,6 +312,17 @@ When the access token expires and a refresh token is available, the CLI refreshe
 
 When `identity_resolver_class` is configured, the CLI calls the resolver after login to populate `tenant_key` and `user_id` from the OAuth token. These identity fields are cached in the token file so subsequent commands don't need the resolver. See the [orchid OrchidIdentityResolver ABC](../orchid/orchid_ai/core/identity.py) for the interface.
 
+> **Note:** the CLI is an **independent OAuth client** — it runs its own
+> authorization-code + PKCE dance against the upstream IdP and calls the
+> identity resolver locally. It does NOT use the
+> centralised `/auth/exchange-code` / `/auth/resolve-identity` /
+> `/auth/refresh-token` endpoints that the MCP gateway uses (Phases 1–5
+> of the [auth-centralisation roadmap](../.knowledge/auth-centralisation.md)).
+> The CLI ships with the upstream secret `client_id` baked into its config
+> because it's a desktop app, not a network service. A future migration
+> could route the CLI through the same endpoints to remove the
+> CLI-side `client_secret` / userinfo coupling — out of scope today.
+
 ### Dev Fallback
 
 When `auth.dev_bypass: true` or `auth.cli` is absent, the CLI uses a dummy token (`cli-token`, tenant=`cli`, user=`cli-user`). This is fully backward compatible -- existing configs without OAuth continue to work unchanged.
