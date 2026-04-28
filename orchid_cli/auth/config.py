@@ -36,6 +36,13 @@ class OAuthProviderConfig:
     identity_resolver_class: str = ""
     # Optional domain (passed to OrchidIdentityResolver.resolve).
     domain: str = ""
+    # Optional ``client_secret`` for OAuth servers that register the CLI
+    # as a CONFIDENTIAL client (PKCE alone is not enough — the
+    # authorization server requires both the verifier AND the secret on
+    # the token endpoint).  Pure-public PKCE setups leave this empty.
+    # Mirrored to refresh-token grants too — see
+    # :func:`orchid_cli.auth.middleware._refresh_token`.
+    client_secret: str = ""
 
 
 def load_oauth_config(config_path: str) -> OAuthProviderConfig | None:
@@ -76,6 +83,11 @@ def load_oauth_config(config_path: str) -> OAuthProviderConfig | None:
     issuer = cli_section.get("issuer", "")
     auth_endpoint = cli_section.get("authorization_endpoint", "")
     token_endpoint = cli_section.get("token_endpoint", "")
+    # Optional secret for OAuth servers that require the CLI to
+    # authenticate as a CONFIDENTIAL client (PKCE alone is not enough
+    # — the token endpoint demands ``client_secret`` too).  Empty
+    # string for pure-public PKCE clients.
+    client_secret = cli_section.get("client_secret", "")
 
     # Carry forward top-level auth fields for identity resolution.
     identity_resolver_class = auth_section.get("identity_resolver_class", "")
@@ -89,6 +101,7 @@ def load_oauth_config(config_path: str) -> OAuthProviderConfig | None:
         issuer=issuer,
         identity_resolver_class=identity_resolver_class,
         domain=domain,
+        client_secret=client_secret,
     )
 
 
@@ -136,6 +149,7 @@ async def discover_oidc_endpoints(config: OAuthProviderConfig) -> OAuthProviderC
         issuer=config.issuer,
         identity_resolver_class=config.identity_resolver_class,
         domain=config.domain,
+        client_secret=config.client_secret,
     )
 
 

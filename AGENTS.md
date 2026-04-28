@@ -17,11 +17,14 @@ orchid-cli/
       token_store.py Secure token persistence (~/.orchid/tokens.json)
       middleware.py   Token refresh + OrchidAuthContext builder
     commands/
+      _session.py    resolve_session(config_path) -> (Orchid, OrchidAuthContext) +
+                     warm_for_user — single chokepoint for bootstrap + auth + MCP warm
       auth.py        login, logout, status subcommands
       chat.py        Full CRUD: create, list, delete, history, send, interactive, rename, share
       config.py      validate command (checks agents.yaml)
       index.py       seed command (batch-index RAG data)
       mcp.py         MCP OAuth: authorize, status, revoke per-server tokens
+                     (authorize warms the just-authorized server post-PKCE)
       skill.py       generate command (Claude Code skills from agents.yaml)
   pyproject.toml
 ```
@@ -55,6 +58,8 @@ orchid-cli/
 7. **OAuth auth is self-contained in `auth/`.** The `auth/` subpackage handles the full OAuth 2.0 Authorization Code + PKCE flow. No OAuth logic in `chat.py`, `bootstrap.py`, or any other module. Chat commands call `get_auth_context(config_path)` which returns either a real OAuth-backed `OrchidAuthContext` or the dev fallback — callers don't know or care which. **The CLI is an independent OAuth client** — it runs its own dance against the upstream IdP and is NOT one of the downstream consumers covered by the [auth-centralisation roadmap](../.knowledge/auth-centralisation.md) (which targets the MCP gateway + Next.js frontends).
 
 8. **Token storage at `~/.orchid/tokens.json`.** Permissions set to `0o600` (owner-only). Tokens are keyed by `client_id`, supporting multiple providers. Refresh tokens are used automatically when the access token expires.
+
+9. **Commands go through `commands/_session.py:resolve_session`.** Every command that needs both an `Orchid` instance and a per-user `OrchidAuthContext` calls `resolve_session(config_path)` (or its `session_context` async-context-manager wrapper), which bootstraps the framework, resolves auth, and warms `passthrough` / `oauth` MCP capability caches once per `(tenant_key, user_id)`. The interactive REPL stays alive across many turns; the warmer's idempotency check makes subsequent loop iterations a no-op. Failures in the per-user warm are logged and ignored — the chat still works, it just pays the lazy discovery cost on first tool call. `bootstrap()` itself warms `auth.mode: none` servers up front (no user identity needed).
 
 ## Commands
 

@@ -157,7 +157,16 @@ def _print_token_info(token: StoredToken) -> None:
 
 
 async def _resolve_and_store_identity(cfg, token: StoredToken) -> None:
-    """Try to resolve identity via OrchidIdentityResolver and persist the result."""
+    """Try to resolve identity via OrchidIdentityResolver and persist the result.
+
+    On success, the resolved subclass + its full ``to_storage_dict()``
+    output are cached on the token so :func:`get_auth_context` can
+    rebuild the typed instance on every subsequent CLI command
+    WITHOUT re-calling the resolver.  This trades the (cheap) cost
+    of one extra HTTP round-trip per login for skipping it on every
+    later command — fine for a CLI where logins are rare and
+    commands are frequent.
+    """
     import httpx
 
     from orchid_ai.utils import import_class
@@ -170,6 +179,12 @@ async def _resolve_and_store_identity(cfg, token: StoredToken) -> None:
 
     token.tenant_key = resolved_auth.tenant_key
     token.user_id = resolved_auth.user_id
+    # Cache the full identity so future commands skip the resolver.
+    # ``auth_class`` is the FQN that :func:`get_auth_context` will
+    # ``import_class()`` on reload; ``auth_state`` is whatever the
+    # subclass chose to round-trip via ``to_storage_dict()``.
+    token.auth_class = f"{type(resolved_auth).__module__}.{type(resolved_auth).__qualname__}"
+    token.auth_state = resolved_auth.to_storage_dict()
 
     console.print(f"  Tenant: [bold]{resolved_auth.tenant_key}[/bold]")
     console.print(f"  User: [bold]{resolved_auth.user_id}[/bold]")

@@ -25,14 +25,13 @@ from rich.table import Table
 
 from orchid_ai.core.state import OrchidAuthContext
 
-from ..auth.middleware import get_auth_context
-from ..bootstrap import cli_context
 from ..slash_commands import (
     SlashContext,
     get_slash_command,
     list_slash_commands,
     register_slash_command,
 )
+from ._session import session_context
 
 app = typer.Typer(help="Chat management and messaging", no_args_is_help=True)
 console = Console()
@@ -52,8 +51,7 @@ def create(
 
 
 async def _create(title: str, config_path: str, model: str) -> None:
-    auth = await get_auth_context(config_path)
-    async with cli_context(config_path, model=model) as ctx:
+    async with session_context(config_path, model=model) as (ctx, auth):
         session = await ctx.chat_repo.create_chat(
             tenant_id=auth.tenant_key,
             user_id=auth.user_id,
@@ -74,8 +72,7 @@ def list_chats(
 
 
 async def _list_chats(config_path: str, model: str) -> None:
-    auth = await get_auth_context(config_path)
-    async with cli_context(config_path, model=model) as ctx:
+    async with session_context(config_path, model=model) as (ctx, auth):
         sessions = await ctx.chat_repo.list_chats(
             tenant_id=auth.tenant_key,
             user_id=auth.user_id,
@@ -117,8 +114,7 @@ def delete(
 
 
 async def _delete(chat_id: str, config_path: str, model: str, force: bool) -> None:
-    auth = await get_auth_context(config_path)
-    async with cli_context(config_path, model=model) as ctx:
+    async with session_context(config_path, model=model) as (ctx, auth):
         resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
@@ -146,8 +142,7 @@ def history(
 
 
 async def _history(chat_id: str, limit: int, config_path: str, model: str) -> None:
-    auth = await get_auth_context(config_path)
-    async with cli_context(config_path, model=model) as ctx:
+    async with session_context(config_path, model=model) as (ctx, auth):
         resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
@@ -190,8 +185,7 @@ def rename(
 
 
 async def _rename(chat_id: str, title: str, config_path: str, model: str) -> None:
-    auth = await get_auth_context(config_path)
-    async with cli_context(config_path, model=model) as ctx:
+    async with session_context(config_path, model=model) as (ctx, auth):
         resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
@@ -211,8 +205,7 @@ def share(
 
 
 async def _share(chat_id: str, config_path: str, model: str) -> None:
-    auth = await get_auth_context(config_path)
-    async with cli_context(config_path, model=model) as ctx:
+    async with session_context(config_path, model=model) as (ctx, auth):
         resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
@@ -236,8 +229,7 @@ def send(
 
 
 async def _send(chat_id: str, message: str, config_path: str, model: str) -> None:
-    auth = await get_auth_context(config_path)
-    async with cli_context(config_path, model=model) as ctx:
+    async with session_context(config_path, model=model) as (ctx, auth):
         resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
@@ -376,8 +368,7 @@ async def _dispatch_slash_command(
 
 
 async def _interactive(chat_id: str | None, config_path: str, model: str) -> None:
-    auth = await get_auth_context(config_path)
-    async with cli_context(config_path, model=model) as ctx:
+    async with session_context(config_path, model=model) as (ctx, auth):
         # Resolve or create a chat
         if chat_id:
             resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
@@ -471,6 +462,16 @@ async def _send_message(
             authorized = await _auto_authorize_servers(unauthorized, registry, auth, store)
             for name in authorized:
                 mcp_auth_status[name] = True
+                # Warm the freshly-authorized server so the chat we're
+                # about to dispatch sees its tools cached up front.
+                # Failure here is advisory — the chat still works, it
+                # just pays the lazy discovery cost on first tool call.
+                try:
+                    await ctx.session_warmer.warm_one_for_user(auth, name)
+                except Exception as exc:
+                    import logging as _logging
+
+                    _logging.getLogger(__name__).warning("[CLI] Post-authorization warm for '%s' raised: %s", name, exc)
 
     # When a checkpointer is active the graph persists conversation state
     # internally — only send the new user message to avoid duplication.

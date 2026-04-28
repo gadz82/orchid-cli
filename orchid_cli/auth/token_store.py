@@ -34,6 +34,19 @@ class StoredToken:
     tenant_key: str = ""
     user_id: str = ""
     extra: dict[str, str] = field(default_factory=dict)
+    # ── Cached identity-resolver result ─────────────────────
+    # When ``auth_class`` is set, ``auth_state`` is a JSON-serialisable
+    # dict produced by ``OrchidAuthContext.to_storage_dict()`` and
+    # consumed by ``<auth_class>.from_storage_dict()``.  This lets the
+    # CLI rebuild the resolver's typed subclass (with all its
+    # platform-specific typed attributes — e.g. a ``.domain`` or a
+    # ``.tenant_uuid`` exposed alongside the base contract) on every
+    # command without re-calling the upstream resolver.  When unset
+    # (legacy tokens or pure-public deployments without a resolver),
+    # the middleware falls back to its old "build a bare
+    # ``OrchidAuthContext``" path.
+    auth_class: str = ""
+    auth_state: dict[str, object] = field(default_factory=dict)  # type: ignore[type-arg]
 
     @property
     def is_expired(self) -> bool:

@@ -62,6 +62,11 @@ async def bootstrap(
     value is picked up from the ``CHAT_EXTRA_MIGRATIONS_PACKAGE`` env
     var.
 
+    After the framework is built, ``auth.mode: none`` MCP servers are
+    warmed proactively so the per-request hot path stops paying the
+    capability discovery cost.  Per-user warming (passthrough / oauth)
+    happens in the :func:`commands._session.resolve_session` helper.
+
     Returns the fully-started :class:`Orchid` facade.  Pair with
     :meth:`Orchid.close` (or use :func:`cli_context`) to ensure
     aiosqlite / checkpointer / token-store connections are released
@@ -81,6 +86,20 @@ async def bootstrap(
         chat_db_dsn=chat_db_dsn,
         chat_extra_migrations_package=chat_extra_migrations_package,
     )
+
+    # Warm ``auth.mode: none`` MCP capabilities up front so the user
+    # never sees the discovery latency on the first chat.  Failures
+    # are advisory — the CLI keeps going regardless.
+    try:
+        report = await orchid.warm_unauthenticated_capabilities()
+        logger.info(
+            "[CLI] MCP warm-up: warmed=%s, skipped=%s, failed=%s",
+            report.warmed,
+            report.skipped,
+            report.failed,
+        )
+    except Exception as exc:
+        logger.warning("[CLI] MCP warm-up raised: %s", exc)
 
     logger.info(
         "[CLI] Ready — model=%s, agents=%s",
