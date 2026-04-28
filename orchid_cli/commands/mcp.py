@@ -258,20 +258,45 @@ async def _authorize(server_name: str, config_path: str, timeout: float) -> None
             console.print("[red]No MCP servers require OAuth authorization.[/red]")
         raise typer.Exit(1)
 
-    auth = await get_auth_context(config_path)
-    store = build_mcp_token_store(class_path=DEFAULT_TOKEN_STORE_CLASS, dsn=DEFAULT_STORAGE_DSN)
-    await store.init_db()
+    # Use the shared session helper so the freshly-authorized server's
+    # capabilities can warm immediately into the agents' MCP clients
+    # for the rest of this CLI process.
+    from ._session import resolve_session
+
+    orchid, auth = await resolve_session(config_path)
     try:
-        ok = await _perform_mcp_oauth_flow(
-            server_name,
-            server_info,
-            auth,
-            store,
-            timeout=timeout,
-            severity="red",  # explicit command — failures are terminal
+        store = orchid.mcp_token_store or build_mcp_token_store(
+            class_path=DEFAULT_TOKEN_STORE_CLASS,
+            dsn=DEFAULT_STORAGE_DSN,
         )
+        if orchid.mcp_token_store is None:
+            await store.init_db()
+        try:
+            ok = await _perform_mcp_oauth_flow(
+                server_name,
+                server_info,
+                auth,
+                store,
+                timeout=timeout,
+                severity="red",  # explicit command — failures are terminal
+            )
+            if ok:
+                # Warm the freshly-authorized server's capabilities so a
+                # follow-up ``orchid chat`` in the same process sees the
+                # tools cached up front.
+                try:
+                    await orchid.session_warmer.warm_one_for_user(auth, server_name)
+                except Exception as exc:
+                    logger.warning(
+                        "[CLI] Post-authorization warm for '%s' raised: %s",
+                        server_name,
+                        exc,
+                    )
+        finally:
+            if orchid.mcp_token_store is None:
+                await store.close()
     finally:
-        await store.close()
+        await orchid.close()
 
     if not ok:
         raise typer.Exit(1)

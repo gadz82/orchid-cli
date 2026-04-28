@@ -52,6 +52,7 @@ async def run_login_flow(
         "auth_endpoint": config.authorization_endpoint,
         "token_endpoint": config.token_endpoint,
         "client_id": config.client_id,
+        "client_secret": config.client_secret,
         "scopes": config.scopes,
         "timeout": timeout,
         "success_title": "Authentication successful",
