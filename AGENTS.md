@@ -22,9 +22,9 @@ orchid-cli/
       auth.py        login, logout, status subcommands
       chat.py        Full CRUD: create, list, delete, history, send, interactive, rename, share
       config.py      validate command (checks agents.yaml)
-      index.py       seed command (batch-index RAG data)
-      mcp.py         MCP OAuth: authorize, status, revoke per-server tokens
-                     (authorize warms the just-authorized server post-PKCE)
+      index.py       file/dir/text/json-file commands (RAG ingestion)
+      mcp.py         MCP OAuth: status, revoke per-server tokens
+                     (authorize flow runs through the API gateway, not the CLI)
       skill.py       generate command (Claude Code skills from agents.yaml)
   pyproject.toml
 ```
@@ -81,14 +81,16 @@ orchid chat share     --config <path> <id>     # Promote RAG to user scope
 
 # MCP server OAuth
 orchid mcp status    --config <path>           # Show OAuth status for MCP servers
-orchid mcp authorize <server> --config <path>  # Authorize via browser (PKCE)
 orchid mcp revoke    <server> --config <path>  # Revoke stored token
 
 # Config
 orchid config validate <agents.yaml>           # Validate agent config
 
 # RAG indexing
-orchid index seed     --config <path>          # Batch-index RAG data
+orchid index file <path> -n <namespace> --config <path>     # Index a single file
+orchid index dir  <path> -n <namespace> --config <path>     # Index a directory
+orchid index text "..."  -n <namespace> --config <path>     # Index inline text
+orchid index json-file <path> -n <namespace> --config <path>  # Bulk-index JSON entries
 
 # Skill generation (Claude Code)
 orchid skill generate <agents.yaml>            # Generate Claude Code skills

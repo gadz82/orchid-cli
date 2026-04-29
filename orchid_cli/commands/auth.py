@@ -8,11 +8,10 @@ Auth commands — OAuth login, logout, and status.
 
 from __future__ import annotations
 
-import asyncio
-
 import typer
 from rich.console import Console
 
+from .._typer_async import async_command
 from ..auth.config import discover_oidc_endpoints, load_oauth_config
 from ..auth.flow import run_login_flow
 from ..auth.token_store import StoredToken, delete_token, load_token, save_token
@@ -22,16 +21,13 @@ console = Console()
 
 
 @app.command()
-def login(
+@async_command
+async def login(
     config: str = typer.Option(..., "--config", "-c", help="Path to orchid.yml"),
     timeout: float = typer.Option(120, "--timeout", "-t", help="Timeout in seconds for browser login"),
-):
+) -> None:
     """Authenticate via OAuth (opens browser)."""
-    asyncio.run(_login(config, timeout))
-
-
-async def _login(config_path: str, timeout: float) -> None:
-    cfg = load_oauth_config(config_path)
+    cfg = load_oauth_config(config)
     if cfg is None:
         console.print(
             "[yellow]No OAuth configuration found.[/yellow]\n\n"
@@ -47,6 +43,11 @@ async def _login(config_path: str, timeout: float) -> None:
             "      # token_endpoint: https://provider.example.com/oauth2/token\n"
         )
         raise typer.Exit(1)
+    await _complete_login(cfg, timeout)
+
+
+async def _complete_login(cfg, timeout: float) -> None:
+    """Run the actual login flow once :func:`load_oauth_config` succeeded."""
 
     # Discover OIDC endpoints if needed.
     try:

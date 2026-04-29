@@ -122,24 +122,17 @@ Manage per-server OAuth for MCP servers that declare `auth.mode: oauth` in `agen
 # Show authorization status for every OAuth-enabled MCP server
 orchid mcp status -c orchid.yml
 
-# Authorize a specific MCP server via browser (PKCE flow)
-orchid mcp authorize <server-name> -c orchid.yml
-orchid mcp authorize <server-name> -c orchid.yml --timeout 180
-
 # Revoke the stored token for a server
 orchid mcp revoke <server-name> -c orchid.yml
 ```
 
-Chat commands also **auto-authorize** any unauthorized MCP servers on first use — the CLI opens the browser, waits for consent, stores the token, and proceeds.
+Authorization itself runs through the API gateway's OAuth callback — the CLI's job is only to surface status and let the user revoke a stored token.
 
 ### RAG Indexing
 
-Seed the vector store with data, **on startup or any time later**:
+Index documents into the vector store, **on startup or any time later**:
 
 ```bash
-# Run the registered StaticIndexer (consumer-provided seed data)
-orchid index seed -c orchid.yml --tenant my-tenant
-
 # Index a single document (PDF, DOCX, XLSX, CSV, TXT, MD, PNG, JPG)
 orchid index file ./docs/faq.pdf -n support -c orchid.yml
 

@@ -3,9 +3,6 @@ Index commands — seed the vector store with data (at any time).
 
 Subcommands::
 
-    orchid index seed -c orchid.yml
-        Run the registered StaticIndexer (if consumer code registers seed data).
-
     orchid index file <path> -n <namespace> -c orchid.yml
         Index a single document file (PDF, DOCX, XLSX, CSV, TXT, MD, PNG, JPG).
         Uses the same ingestion pipeline as the /upload endpoint.
@@ -28,7 +25,6 @@ Scope options shared by all commands:
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -40,8 +36,9 @@ from rich.console import Console
 from orchid_ai.core.repository import Document, OrchidVectorWriter
 from orchid_ai.documents.chunker import ChunkConfig
 from orchid_ai.documents.pipeline import ingest_document
-from orchid_ai.rag.indexer import StaticIndexer
 from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope
+
+from .._typer_async import async_command
 
 logger = logging.getLogger(__name__)
 
@@ -98,36 +95,12 @@ async def _require_writer(ctx) -> OrchidVectorWriter:
     return reader
 
 
-# ── Command: seed (existing — kept for backward compat) ────────
-
-
-@app.command()
-def seed(
-    config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
-    tenant: str = typer.Option("default", "--tenant", "-t", help="Tenant ID for indexing"),
-):
-    """Run the registered StaticIndexer (consumer-provided seed data)."""
-    asyncio.run(_seed(config, tenant))
-
-
-async def _seed(config_path: str, tenant: str) -> None:
-    from ..bootstrap import cli_context
-
-    async with cli_context(config_path) as ctx:
-        writer = await _require_writer(ctx)
-        indexer = StaticIndexer(writer=writer)
-        counts = await indexer.index_all(tenant_key=tenant)
-
-        console.print(f"[green]Indexed[/green] for tenant={tenant}:")
-        for namespace, count in counts.items():
-            console.print(f"  {namespace}: {count} document(s)")
-
-
 # ── Command: file ──────────────────────────────────────────────
 
 
 @app.command()
-def file(
+@async_command
+async def file(
     path: str = typer.Argument(..., help="Path to file to index"),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Target collection name"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
@@ -137,14 +110,14 @@ def file(
     vision_model: str = typer.Option("", "--vision-model", help="Vision LLM for image parsing"),
     chunk_size: int = typer.Option(1000, "--chunk-size", help="Characters per chunk"),
     chunk_overlap: int = typer.Option(200, "--chunk-overlap", help="Overlap between chunks"),
-):
+) -> None:
     """Index a single document file into a namespace.
 
     Supported: PDF, DOCX, XLSX, CSV, TXT, MD, PNG, JPG.
     Uses the same ingestion pipeline as the ``/upload`` endpoint
     (parse → chunk → embed → store).
     """
-    asyncio.run(_index_file(path, namespace, config, tenant, scope, user, vision_model, chunk_size, chunk_overlap))
+    await _index_file(path, namespace, config, tenant, scope, user, vision_model, chunk_size, chunk_overlap)
 
 
 async def _index_file(
@@ -198,7 +171,8 @@ async def _index_file(
 
 
 @app.command()
-def dir(
+@async_command
+async def dir(
     path: str = typer.Argument(..., help="Directory to index (recursively)"),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Target collection name"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
@@ -209,21 +183,19 @@ def dir(
     chunk_size: int = typer.Option(1000, "--chunk-size", help="Characters per chunk"),
     chunk_overlap: int = typer.Option(200, "--chunk-overlap", help="Overlap between chunks"),
     pattern: str = typer.Option("", "--pattern", help="Glob pattern (e.g. '*.md'). Default: all supported extensions."),
-):
+) -> None:
     """Recursively index all supported files in a directory."""
-    asyncio.run(
-        _index_dir(
-            path,
-            namespace,
-            config,
-            tenant,
-            scope,
-            user,
-            vision_model,
-            chunk_size,
-            chunk_overlap,
-            pattern,
-        )
+    await _index_dir(
+        path,
+        namespace,
+        config,
+        tenant,
+        scope,
+        user,
+        vision_model,
+        chunk_size,
+        chunk_overlap,
+        pattern,
     )
 
 
@@ -299,7 +271,8 @@ async def _index_dir(
 
 
 @app.command()
-def text(
+@async_command
+async def text(
     content: str = typer.Argument(..., help="Inline text to index as a single document"),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Target collection name"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
@@ -308,13 +281,13 @@ def text(
     user: str = typer.Option("", "--user", help="User ID (required when --scope user)"),
     title: str = typer.Option("", "--title", help="Optional title stored in metadata"),
     doc_id: str = typer.Option("", "--id", help="Optional document ID (auto-generated if empty)"),
-):
+) -> None:
     """Index a single block of inline text as a document.
 
     The text is stored as one document (no chunking).  Useful for seeding
     FAQ snippets, summaries, or short guides.
     """
-    asyncio.run(_index_text(content, namespace, config, tenant, scope, user, title, doc_id))
+    await _index_text(content, namespace, config, tenant, scope, user, title, doc_id)
 
 
 async def _index_text(
@@ -359,14 +332,15 @@ async def _index_text(
 
 
 @app.command("json-file")
-def json_file(
+@async_command
+async def json_file(
     path: str = typer.Argument(..., help="Path to JSON file with array of {content, metadata?, id?}"),
     namespace: str = typer.Option(..., "--namespace", "-n", help="Target collection name"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     tenant: str = typer.Option("default", "--tenant", "-t", help="Tenant ID"),
     scope: str = typer.Option("tenant", "--scope", "-s", help="Scope: tenant | shared | user"),
     user: str = typer.Option("", "--user", help="User ID (required when --scope user)"),
-):
+) -> None:
     """Bulk-index documents from a JSON file.
 
     The JSON must be an array of objects with at least ``content`` (string).
@@ -381,7 +355,7 @@ def json_file(
           {"content": "Business hours are 9-5 EST..."}
         ]
     """
-    asyncio.run(_index_json(path, namespace, config, tenant, scope, user))
+    await _index_json(path, namespace, config, tenant, scope, user)
 
 
 async def _index_json(

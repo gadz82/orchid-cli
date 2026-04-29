@@ -10,28 +10,32 @@ Mirrors orchid-api chat endpoints:
     orchid chat interactive [--chat <chat_id>]
     orchid chat rename <chat_id> "new title"
     orchid chat share <chat_id>
+
+The send/stream pipeline lives in :mod:`._chat_send`; the REPL and
+slash-command machinery live in :mod:`._chat_interactive`. This module
+owns only the Typer surface.
 """
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Optional
+from typing import Optional
 
 import typer
-from langchain_core.messages import AIMessage, HumanMessage
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
-from orchid_ai.core.state import OrchidAuthContext
-
-from ..slash_commands import (
-    SlashContext,
-    get_slash_command,
-    list_slash_commands,
-    register_slash_command,
-)
+from .._typer_async import async_command
+from ._chat_helpers import resolve_chat_id
+from ._chat_interactive import register_builtin_slash_commands, run_repl
+from ._chat_send import send_message
 from ._session import session_context
+
+# Re-run the built-in slash registration on every (re-)import of this
+# module. The handlers themselves are owned by ``_chat_interactive``, but
+# integrators that reload ``commands.chat`` to refresh plugins expect
+# the built-ins to come back too.
+register_builtin_slash_commands()
 
 app = typer.Typer(help="Chat management and messaging", no_args_is_help=True)
 console = Console()
@@ -41,17 +45,14 @@ console = Console()
 
 
 @app.command()
-def create(
+@async_command
+async def create(
     title: str = typer.Option("New chat", "--title", "-t", help="Chat title"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
-):
+) -> None:
     """Create a new chat session."""
-    asyncio.run(_create(title, config, model))
-
-
-async def _create(title: str, config_path: str, model: str) -> None:
-    async with session_context(config_path, model=model) as (ctx, auth):
+    async with session_context(config, model=model) as (ctx, auth):
         session = await ctx.chat_repo.create_chat(
             tenant_id=auth.tenant_key,
             user_id=auth.user_id,
@@ -63,16 +64,13 @@ async def _create(title: str, config_path: str, model: str) -> None:
 
 
 @app.command("list")
-def list_chats(
+@async_command
+async def list_chats(
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
-):
+) -> None:
     """List all chat sessions."""
-    asyncio.run(_list_chats(config, model))
-
-
-async def _list_chats(config_path: str, model: str) -> None:
-    async with session_context(config_path, model=model) as (ctx, auth):
+    async with session_context(config, model=model) as (ctx, auth):
         sessions = await ctx.chat_repo.list_chats(
             tenant_id=auth.tenant_key,
             user_id=auth.user_id,
@@ -103,19 +101,16 @@ async def _list_chats(config_path: str, model: str) -> None:
 
 
 @app.command()
-def delete(
+@async_command
+async def delete(
     chat_id: str = typer.Argument(..., help="Chat ID (or prefix)"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
-):
+) -> None:
     """Delete a chat session and all its messages."""
-    asyncio.run(_delete(chat_id, config, model, force))
-
-
-async def _delete(chat_id: str, config_path: str, model: str, force: bool) -> None:
-    async with session_context(config_path, model=model) as (ctx, auth):
-        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
+    async with session_context(config, model=model) as (ctx, auth):
+        resolved_id = await resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
@@ -131,19 +126,16 @@ async def _delete(chat_id: str, config_path: str, model: str, force: bool) -> No
 
 
 @app.command()
-def history(
+@async_command
+async def history(
     chat_id: str = typer.Argument(..., help="Chat ID (or prefix)"),
     limit: int = typer.Option(50, "--limit", "-n", help="Max messages to show"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
-):
+) -> None:
     """Show message history for a chat."""
-    asyncio.run(_history(chat_id, limit, config, model))
-
-
-async def _history(chat_id: str, limit: int, config_path: str, model: str) -> None:
-    async with session_context(config_path, model=model) as (ctx, auth):
-        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
+    async with session_context(config, model=model) as (ctx, auth):
+        resolved_id = await resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
@@ -174,19 +166,16 @@ async def _history(chat_id: str, limit: int, config_path: str, model: str) -> No
 
 
 @app.command()
-def rename(
+@async_command
+async def rename(
     chat_id: str = typer.Argument(..., help="Chat ID (or prefix)"),
     title: str = typer.Argument(..., help="New title"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
-):
+) -> None:
     """Rename a chat session."""
-    asyncio.run(_rename(chat_id, title, config, model))
-
-
-async def _rename(chat_id: str, title: str, config_path: str, model: str) -> None:
-    async with session_context(config_path, model=model) as (ctx, auth):
-        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
+    async with session_context(config, model=model) as (ctx, auth):
+        resolved_id = await resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
@@ -195,18 +184,15 @@ async def _rename(chat_id: str, title: str, config_path: str, model: str) -> Non
 
 
 @app.command()
-def share(
+@async_command
+async def share(
     chat_id: str = typer.Argument(..., help="Chat ID (or prefix)"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
-):
+) -> None:
     """Mark a chat as shared."""
-    asyncio.run(_share(chat_id, config, model))
-
-
-async def _share(chat_id: str, config_path: str, model: str) -> None:
-    async with session_context(config_path, model=model) as (ctx, auth):
-        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
+    async with session_context(config, model=model) as (ctx, auth):
+        resolved_id = await resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
@@ -218,23 +204,20 @@ async def _share(chat_id: str, config_path: str, model: str) -> None:
 
 
 @app.command()
-def send(
+@async_command
+async def send(
     chat_id: str = typer.Argument(..., help="Chat ID (or prefix)"),
     message: str = typer.Argument(..., help="The message to send"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
-):
+) -> None:
     """Send a message to a chat and print the response."""
-    asyncio.run(_send(chat_id, message, config, model))
-
-
-async def _send(chat_id: str, message: str, config_path: str, model: str) -> None:
-    async with session_context(config_path, model=model) as (ctx, auth):
-        resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
+    async with session_context(config, model=model) as (ctx, auth):
+        resolved_id = await resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
 
-        response_text, agents_used = await _send_message(ctx, resolved_id, message, auth)
+        response_text, agents_used = await send_message(ctx, resolved_id, message, auth)
 
         console.print()
         # Render the final response as Markdown so ``**bold**``, lists, and
@@ -245,471 +228,11 @@ async def _send(chat_id: str, message: str, config_path: str, model: str) -> Non
 
 
 @app.command()
-def interactive(
+@async_command
+async def interactive(
     chat_id: Optional[str] = typer.Argument(None, help="Chat ID to resume (or prefix). Creates new if omitted."),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
-):
+) -> None:
     """Start an interactive chat REPL with full persistence."""
-    asyncio.run(_interactive(chat_id, config, model))
-
-
-# ── Built-in slash commands (registered via the extensible registry) ─
-
-
-async def _cmd_list(sc: SlashContext) -> str | None:
-    sessions = await sc.ctx.chat_repo.list_chats(tenant_id=sc.auth.tenant_key, user_id=sc.auth.user_id)
-    if not sessions:
-        sc.console.print("[dim]No chats.[/dim]")
-    else:
-        for s in sessions:
-            marker = " [bold]← current[/bold]" if s.id == sc.current_chat_id else ""
-            sc.console.print(f"  {s.id[:12]}…  {s.title}{marker}")
-    sc.console.print()
-    return None
-
-
-async def _cmd_switch(sc: SlashContext) -> str | None:
-    if not sc.arg:
-        sc.console.print("[red]Usage: /switch <chat_id>[/red]")
-        return None
-    new_id = await _resolve_chat_id(sc.ctx, sc.arg, sc.auth)
-    if new_id:
-        chat = await sc.ctx.chat_repo.get_chat(new_id)
-        sc.console.print(f"[bold]Switched to:[/bold] {chat.title} ({new_id[:12]}…)\n")
-        return new_id
-    return None
-
-
-async def _cmd_new(sc: SlashContext) -> str | None:
-    title = sc.arg or "Interactive session"
-    new_chat = await sc.ctx.chat_repo.create_chat(
-        tenant_id=sc.auth.tenant_key,
-        user_id=sc.auth.user_id,
-        title=title,
-    )
-    sc.console.print(f"[bold green]New chat:[/bold green] {new_chat.id[:12]}… — {title}\n")
-    return new_chat.id
-
-
-async def _cmd_history(sc: SlashContext) -> str | None:
-    messages = await sc.ctx.chat_repo.get_messages(sc.current_chat_id, limit=20)
-    if not messages:
-        sc.console.print("[dim]No messages yet.[/dim]\n")
-    else:
-        for msg in messages:
-            if msg.role == "user":
-                sc.console.print(f"  [cyan]You:[/cyan] {msg.content[:80]}")
-            elif msg.role == "assistant":
-                sc.console.print(f"  [green]Asst:[/green] {msg.content[:80]}")
-        sc.console.print()
-    return None
-
-
-async def _cmd_rename(sc: SlashContext) -> str | None:
-    if not sc.arg:
-        sc.console.print("[red]Usage: /rename <new title>[/red]")
-        return None
-    await sc.ctx.chat_repo.update_title(sc.current_chat_id, sc.arg)
-    sc.console.print(f"[bold]Renamed:[/bold] {sc.arg}\n")
-    return None
-
-
-# Built-in slash commands registered at import time.  We guard against
-# double-registration (happens under ``importlib.reload`` and in some
-# pytest collection modes) by first clearing our own entries from the
-# registry — integrator-added commands under different names are kept.
-_BUILTIN_SLASH_COMMANDS: tuple[tuple[str, Any, str], ...] = (
-    ("/list", _cmd_list, "List chats"),
-    ("/switch", _cmd_switch, "Switch to another chat (by prefix)"),
-    ("/new", _cmd_new, "Create a new chat"),
-    ("/history", _cmd_history, "Show recent messages"),
-    ("/rename", _cmd_rename, "Rename the current chat"),
-)
-
-
-def _register_builtin_slash_commands() -> None:
-    """Register the chat module's built-in slash commands (idempotent).
-
-    Calling this twice is a no-op — each ``register_slash_command`` call
-    replaces the prior entry for that name, so the final state is the
-    same regardless of how many times the chat module is imported.
-    """
-    for name, handler, help_text in _BUILTIN_SLASH_COMMANDS:
-        register_slash_command(name, handler, help=help_text)
-
-
-_register_builtin_slash_commands()
-
-
-async def _dispatch_slash_command(
-    ctx,
-    cmd: str,
-    arg: str,
-    current_chat_id: str,
-    auth,
-) -> str | None:
-    """Dispatch a slash command via the registry. Returns new chat_id if changed, else None."""
-    entry = get_slash_command(cmd)
-    if entry is None:
-        console.print(f"[red]Unknown command: {cmd}[/red]")
-        return None
-    sc = SlashContext(
-        ctx=ctx,
-        arg=arg,
-        current_chat_id=current_chat_id,
-        auth=auth,
-        console=console,
-    )
-    return await entry.handler(sc)
-
-
-# ── Interactive REPL ────────────────────────────────────────
-
-
-async def _interactive(chat_id: str | None, config_path: str, model: str) -> None:
-    async with session_context(config_path, model=model) as (ctx, auth):
-        # Resolve or create a chat
-        if chat_id:
-            resolved_id = await _resolve_chat_id(ctx, chat_id, auth)
-            if not resolved_id:
-                return
-            chat = await ctx.chat_repo.get_chat(resolved_id)
-            console.print(f"[bold]Resuming:[/bold] {chat.title} ({resolved_id[:12]}…)")
-        else:
-            chat = await ctx.chat_repo.create_chat(
-                tenant_id=auth.tenant_key,
-                user_id=auth.user_id,
-                title="Interactive session",
-            )
-            resolved_id = chat.id
-            console.print(f"[bold]New chat:[/bold] {resolved_id[:12]}…")
-
-        console.print()
-        console.print("[bold]Orchid Interactive Chat[/bold]")
-        registered = ", ".join(entry.name for entry in list_slash_commands())
-        console.print(f"Commands: /quit, {registered}")
-        console.print()
-
-        current_chat_id = resolved_id
-
-        while True:
-            try:
-                user_input = console.input("[bold cyan]You:[/bold cyan] ")
-            except (EOFError, KeyboardInterrupt):
-                break
-
-            stripped = user_input.strip()
-            if not stripped:
-                continue
-
-            # Handle slash commands via dispatch table
-            if stripped.startswith("/"):
-                parts = stripped.split(maxsplit=1)
-                cmd = parts[0].lower()
-                arg = parts[1] if len(parts) > 1 else ""
-
-                if cmd in ("/quit", "/exit", "/q"):
-                    break
-
-                result = await _dispatch_slash_command(ctx, cmd, arg, current_chat_id, auth)
-                if result is not None:
-                    current_chat_id = result  # /switch and /new update the active chat
-                continue
-
-            # Send message (streaming in interactive mode for real-time output).
-            # The header ends with a newline so ``rich.Live`` inside
-            # ``_stream_graph`` starts on its own line and can safely render
-            # Markdown without clobbering the label.
-            console.print("\n[bold green]Assistant:[/bold green]")
-            response_text, agents_used = await _send_message(ctx, current_chat_id, stripped, auth, streaming=True)
-            if agents_used:
-                console.print(f"  [dim]Agents: {', '.join(agents_used)}[/dim]")
-            console.print()
-
-        console.print("\n[dim]Session ended.[/dim]")
-
-
-# ── Helpers ─────────────────────────────────────────────────
-
-
-async def _send_message(
-    ctx, chat_id: str, message: str, auth: OrchidAuthContext, *, streaming: bool = False
-) -> tuple[str, list[str]]:
-    """Send a message through the graph, persist to storage, return (response, agents_used)."""
-    # Load history
-    history_rows = await ctx.chat_repo.get_messages(chat_id, limit=50)
-    history_messages = []
-    for row in history_rows:
-        if row.role == "user":
-            history_messages.append(HumanMessage(content=row.content, id=row.id))
-        elif row.role == "assistant":
-            history_messages.append(AIMessage(content=row.content, id=row.id))
-
-    # Pre-flight MCP auth check — auto-trigger OAuth for unauthorized servers
-    mcp_auth_status: dict[str, bool] = {}
-    registry = ctx.runtime.mcp_auth_registry
-    store = ctx.mcp_token_store
-    if registry and not registry.empty and store:
-        for name in registry.oauth_servers:
-            token = await store.get_token(auth.tenant_key, auth.user_id, name)
-            mcp_auth_status[name] = token is not None and not token.is_expired
-
-        unauthorized = [name for name, ok in mcp_auth_status.items() if not ok]
-        if unauthorized:
-            from .mcp import _auto_authorize_servers
-
-            authorized = await _auto_authorize_servers(unauthorized, registry, auth, store)
-            for name in authorized:
-                mcp_auth_status[name] = True
-                # Warm the freshly-authorized server so the chat we're
-                # about to dispatch sees its tools cached up front.
-                # Failure here is advisory — the chat still works, it
-                # just pays the lazy discovery cost on first tool call.
-                try:
-                    await ctx.session_warmer.warm_one_for_user(auth, name)
-                except Exception as exc:
-                    import logging as _logging
-
-                    _logging.getLogger(__name__).warning("[CLI] Post-authorization warm for '%s' raised: %s", name, exc)
-
-    # When a checkpointer is active the graph persists conversation state
-    # internally — only send the new user message to avoid duplication.
-    has_checkpointer = ctx.runtime.checkpointer is not None
-
-    if has_checkpointer:
-        initial_state: dict = {
-            "messages": [HumanMessage(content=message)],
-            "auth_context": auth,
-            "chat_id": chat_id,
-        }
-    else:
-        initial_state: dict = {
-            "messages": history_messages + [HumanMessage(content=message)],
-            "auth_context": auth,
-            "chat_id": chat_id,
-        }
-    if mcp_auth_status:
-        initial_state["mcp_auth_status"] = mcp_auth_status
-
-    graph_config: dict = {"configurable": {"thread_id": chat_id}}
-
-    # Use streaming for interactive mode (prints tokens in real-time)
-    if streaming:
-        response_text, agents_used = await _stream_graph(ctx, initial_state, config=graph_config)
-    else:
-        result = await _invoke_with_approval(ctx, initial_state, graph_config)
-        response_text = result.get("final_response", "No response generated.")
-        agents_used = result.get("active_agents", [])
-
-    # Persist original message + response
-    await ctx.chat_repo.add_message(chat_id, "user", message)
-    await ctx.chat_repo.add_message(chat_id, "assistant", response_text, agents_used=agents_used)
-
-    # Auto-title from first message
-    if not history_rows:
-        title = message[:50].strip()
-        if len(message) > 50:
-            title += "…"
-        await ctx.chat_repo.update_title(chat_id, title)
-
-    return response_text, agents_used
-
-
-async def _invoke_with_approval(ctx, initial_state: dict, graph_config: dict) -> dict:
-    """Invoke the graph, handling HITL tool approval interrupts.
-
-    When the graph pauses for tool approval (``GraphInterrupt``), the
-    user is prompted in the terminal.  On approval the graph resumes;
-    on denial the tool is skipped.
-    """
-    from rich.prompt import Confirm
-
-    invocation_input = initial_state
-
-    while True:
-        try:
-            return await ctx.graph.ainvoke(invocation_input, config=graph_config)
-        except Exception as exc:
-            if type(exc).__name__ != "GraphInterrupt":
-                raise
-            interrupts = exc.args[0] if exc.args else []
-            if not interrupts:
-                raise
-
-            # Prompt user for each interrupt
-            approved = True
-            for interrupt_obj in interrupts:
-                val = interrupt_obj.value
-                if isinstance(val, dict):
-                    tool_name = val.get("tool", "unknown")
-                    tool_args = val.get("args", {})
-                    agent_name = val.get("agent", "")
-                    console.print(
-                        f"\n[bold yellow]Tool approval needed[/bold yellow] "
-                        f"({agent_name}): [bold]{tool_name}[/bold]({tool_args})"
-                    )
-                else:
-                    console.print(f"\n[bold yellow]Approval needed:[/bold yellow] {val}")
-
-                if not Confirm.ask("[bold]Approve execution?[/bold]", default=True):
-                    approved = False
-
-            # Resume with decision
-            from langgraph.types import Command
-
-            invocation_input = Command(resume={"approved": approved})
-
-
-async def _stream_graph(
-    ctx,
-    initial_state: dict,
-    *,
-    config: dict | None = None,
-) -> tuple[str, list[str]]:
-    """Stream graph execution with live Markdown rendering.
-
-    The supervisor node can be invoked **multiple times** in one graph
-    run — once for the initial routing decision (structured-output JSON),
-    once per inter-agent hop in a sequential skill, and finally once for
-    the user-facing synthesis.  Each invocation is a distinct LLM call
-    with its own ``message.id``.  The LAST coherent supervisor block
-    carries the synthesis; earlier blocks are internal plumbing the user
-    should never see.
-
-    Strategy
-    --------
-    * ``stream_mode=["messages", "values"]`` — the ``messages`` leg
-      gives token deltas; the ``values`` leg captures the supervisor's
-      ``final_response`` when it answers without dispatching agents.
-    * Group token deltas by ``message.id``.  When the id changes, the
-      accumulated buffer is discarded and the Live block is reset —
-      only the LATEST LLM call's output survives to the final render.
-    * Classify each new message by its FIRST non-empty chunk: if it
-      starts with ``{`` it's routing JSON and the whole message is
-      suppressed; if it starts with ``[Supervisor`` it's an internal
-      handoff marker and is likewise suppressed.
-    * Agent-node tokens are never rendered to the answer area; the
-      agent's activation IS shown as a dim status line above the Live
-      region so the user still sees which agent(s) handled the turn.
-    * The final text feeds a :class:`rich.live.Live` block wrapping a
-      :class:`rich.markdown.Markdown` so ``**bold**``, lists, and
-      fenced code render correctly as tokens arrive.
-
-    Returns
-    -------
-    (full_response, agents_used) : tuple[str, list[str]]
-        ``full_response`` is the final Markdown source (what the caller
-        persists to chat history).
-    """
-    from rich.live import Live
-    from rich.markdown import Markdown
-
-    seen_agents: set[str] = set()
-    current_msg_id: str | None = None
-    current_msg_suppressed: bool = False
-    response_parts: list[str] = []
-    direct_final: str | None = None
-
-    with Live(
-        Markdown(""),
-        console=console,
-        refresh_per_second=15,
-        vertical_overflow="visible",
-        transient=False,
-    ) as live:
-        async for mode, payload in ctx.graph.astream(
-            initial_state,
-            config=config,
-            stream_mode=["messages", "values"],
-        ):
-            # ── ``values`` events capture the full graph state.  We
-            # only need it for the supervisor's direct answer (no agent
-            # dispatched → no synthesis tokens to collect). ──
-            if mode == "values":
-                if isinstance(payload, dict):
-                    fr = payload.get("final_response")
-                    if fr:
-                        direct_final = fr
-                continue
-
-            msg, metadata = payload
-            node = metadata.get("langgraph_node", "")
-            content = getattr(msg, "content", "")
-
-            if not content or not isinstance(content, str):
-                continue
-            if getattr(msg, "tool_calls", None):
-                continue
-
-            # ── Agent node: one-time dim status, swallow the tokens. ──
-            if node.endswith("_agent"):
-                agent_name = node.removesuffix("_agent")
-                if agent_name not in seen_agents:
-                    seen_agents.add(agent_name)
-                    # ``console.print`` inside Live routes the output
-                    # above the managed region, so status lines stay
-                    # visible alongside the final rendered answer.
-                    console.print(f"[dim italic]↳ {agent_name} agent working…[/dim italic]")
-                continue
-
-            if node != "supervisor":
-                continue
-
-            # ── New supervisor LLM call?  Reset the buffer so any
-            # previous routing / inter-agent-handoff output is dropped,
-            # and classify this message by its first non-empty chunk. ──
-            msg_id = getattr(msg, "id", None)
-            if msg_id != current_msg_id:
-                current_msg_id = msg_id
-                response_parts = []
-                live.update(Markdown(""))
-
-                first = content.lstrip()
-                current_msg_suppressed = (
-                    # Routing JSON (structured-output Pydantic).
-                    first.startswith("{")
-                    # Internal handoff marker like ``[Supervisor → menu]``.
-                    or content.startswith("[Supervisor")
-                )
-
-            if current_msg_suppressed:
-                continue
-
-            response_parts.append(content)
-            live.update(Markdown("".join(response_parts)))
-
-        # ── Direct-response fallback (supervisor answered without
-        # dispatching any agent, so no synthesis tokens arrived). ──
-        if not response_parts and direct_final:
-            response_parts.append(direct_final)
-            live.update(Markdown(direct_final))
-
-    full_response = "".join(response_parts).strip() or "No response generated."
-    return full_response, sorted(seen_agents)
-
-
-async def _resolve_chat_id(ctx, chat_id_prefix: str, auth: OrchidAuthContext) -> str | None:
-    """Resolve a chat ID prefix to a full ID. Prints error if not found."""
-    # Try exact match first
-    chat = await ctx.chat_repo.get_chat(chat_id_prefix)
-    if chat and chat.user_id == auth.user_id:
-        return chat.id
-
-    # Try prefix match
-    sessions = await ctx.chat_repo.list_chats(
-        tenant_id=auth.tenant_key,
-        user_id=auth.user_id,
-    )
-    matches = [s for s in sessions if s.id.startswith(chat_id_prefix)]
-
-    if len(matches) == 1:
-        return matches[0].id
-    elif len(matches) > 1:
-        console.print(f"[red]Ambiguous prefix '{chat_id_prefix}' — matches {len(matches)} chats:[/red]")
-        for s in matches:
-            console.print(f"  {s.id[:12]}…  {s.title}")
-        return None
-    else:
-        console.print(f"[red]Chat not found: {chat_id_prefix}[/red]")
-        return None
+    await run_repl(chat_id, config, model)
