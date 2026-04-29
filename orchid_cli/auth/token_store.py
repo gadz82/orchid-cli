@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
 
 _ORCHID_DIR = Path.home() / ".orchid"
 _TOKEN_FILE = _ORCHID_DIR / "tokens.json"
-# Sentinel file used to serialise the read-modify-write sequence in
-# ``save_token`` / ``delete_token``. Two CLI invocations launched in
-# parallel each open this file with ``LOCK_EX`` and queue behind the
-# winner — without it, the loser's read returns the pre-write state
-# and its write clobbers the winner's mutation.
-_LOCK_FILE = _ORCHID_DIR / ".tokens.lock"
+# Filename of the sentinel used to serialise the read-modify-write
+# sequence in ``save_token`` / ``delete_token``. The full path is
+# built inside ``_exclusive_lock()`` from the current ``_ORCHID_DIR``
+# so tests that monkeypatch ``_ORCHID_DIR`` don't leak writes to the
+# real home directory.
+_LOCK_FILENAME = ".tokens.lock"
 
 
 @dataclass
@@ -160,7 +160,8 @@ def _exclusive_lock() -> Iterator[None]:
     accept a small risk of last-writer-wins.
     """
     _ORCHID_DIR.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(_LOCK_FILE), os.O_RDWR | os.O_CREAT, 0o600)
+    lock_file = _ORCHID_DIR / _LOCK_FILENAME
+    fd = os.open(str(lock_file), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         if _HAS_FCNTL:
             _fcntl.flock(fd, _fcntl.LOCK_EX)

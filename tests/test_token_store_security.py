@@ -43,13 +43,15 @@ def test_save_creates_file_with_owner_only_perms(isolated_orchid_dir):
 
 
 def test_save_is_atomic_no_partial_files_left_behind(isolated_orchid_dir):
-    """A successful save leaves only the canonical ``tokens.json``;
-    no stray ``.tokens_*.tmp`` files remain in the directory."""
+    """A successful save leaves no stray ``.tokens_*.tmp`` files; the
+    only artefacts on disk are ``tokens.json`` and the cross-process
+    lock sentinel."""
     save_token("client-a", StoredToken(access_token="t1"))
     save_token("client-b", StoredToken(access_token="t2"))
 
-    children = sorted(p.name for p in isolated_orchid_dir.iterdir())
-    assert children == ["tokens.json"]
+    stray = [p.name for p in isolated_orchid_dir.iterdir() if p.name.startswith(".tokens_")]
+    assert stray == [], f"unexpected temp files: {stray}"
+    assert (isolated_orchid_dir / "tokens.json").exists()
 
 
 def test_save_then_load_round_trips(isolated_orchid_dir):
