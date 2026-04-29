@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-04-29)
+
+### Bug Fixes
+
+- **cli**: Centralize session handling and warm-up lifecycle
+  ([`cfe9c2d`](https://github.com/gadz82/orchid-cli/commit/cfe9c2de1cb39cd6002ff9a49bda2253ea25eee9))
+
+- **cli**: Ensure lock file path respects test monkeypatching of _ORCHID_DIR, enhance test for
+  temporary file cleanup
+  ([`471de32`](https://github.com/gadz82/orchid-cli/commit/471de32d515a54a34d568f2c87a74f34c0b66ca1))
+
+### Documentation
+
+- **cli**: Clarify CLI OAuth independence and auth-centralisation roadmap context
+  ([`da14aa6`](https://github.com/gadz82/orchid-cli/commit/da14aa6dc5b571e63ce7bd10a633133979ceba82))
+
+### Features
+
+- Bump orchid-ai dependency to >=1.4.0 in CLI and API
+  ([`9ed4940`](https://github.com/gadz82/orchid-cli/commit/9ed49401fe3c5337bef84a5c235e9bdc4bdaac3f))
+
+- **cli**: Enhance chat commands and RAG indexing, improve security for token storage
+  ([`74dac43`](https://github.com/gadz82/orchid-cli/commit/74dac433ce7731374f4bd4366cbee6c7ecf1dfc8))
+
+
 ## v1.1.4 (2026-04-22)
 
 ### Bug Fixes
