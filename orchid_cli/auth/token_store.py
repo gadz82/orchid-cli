@@ -67,8 +67,7 @@ class StoredToken:
 
 def save_token(client_id: str, token: StoredToken) -> None:
     """Persist a token for the given client_id."""
-    _ORCHID_DIR.mkdir(parents=True, exist_ok=True)
-
+    # Directory creation happens in _exclusive_lock() to respect monkeypatching
     with _exclusive_lock():
         all_tokens = _read_all()
         all_tokens[client_id] = asdict(token)
@@ -159,8 +158,10 @@ def _exclusive_lock() -> Iterator[None]:
     where ``fcntl`` is unavailable; concurrent CLI invocations there
     accept a small risk of last-writer-wins.
     """
-    _ORCHID_DIR.mkdir(parents=True, exist_ok=True)
-    lock_file = _ORCHID_DIR / _LOCK_FILENAME
+    # Read _ORCHID_DIR from globals() so monkeypatching in tests works
+    orchid_dir = globals()["_ORCHID_DIR"]
+    orchid_dir.mkdir(parents=True, exist_ok=True)
+    lock_file = orchid_dir / _LOCK_FILENAME
     fd = os.open(str(lock_file), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         if _HAS_FCNTL:
