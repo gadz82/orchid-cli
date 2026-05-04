@@ -4,9 +4,17 @@
 
 <h1 align="center">Orchid CLI</h1>
 
-Command-line interface for the [Orchid](https://github.com/gadz82/orchid) multi-agent AI framework.
+Command-line interface for the [Orchid](../orchid/) multi-agent AI framework.
 
-Provides terminal access to all chat operations, configuration validation, RAG indexing, and Claude Code skill generation. Mirrors the full functionality of [orchid-api](../orchid-api) but runs locally with no server, Docker, or external database required (defaults to SQLite).
+Provides terminal access to all chat operations, configuration validation, RAG indexing, MCP server authorisation, and Claude Code skill generation. Mirrors the full functionality of [orchid-api](../orchid-api/) but runs locally with no server, Docker, or external database required (defaults to SQLite).
+
+## Why use the CLI
+
+- **Embedded workflows** — the CLI runs the same Orchid runtime as the API but in-process. Useful for batch jobs, scripted pipelines, and offline environments.
+- **Identical config surface** — point at any `orchid.yml` / `agents.yaml` pair (basketball, restaurant, helpdesk, your own) and the CLI behaves the way orchid-api does, minus the HTTP layer.
+- **No infrastructure required** — defaults to SQLite chat storage and the in-process vector reader. Add Qdrant / Postgres only when you need them.
+- **Plugin extensible** — register custom subcommands via Python entry points without forking.
+- **Skill export** — turn an `agents.yaml` into a set of Claude Code skill folders so the same agents are usable from `claude` directly.
 
 ## Installation
 
@@ -31,6 +39,30 @@ orchid chat interactive -c orchid.yml
 # Send a single message:
 orchid chat create -c orchid.yml -t "My Chat"
 orchid chat send <chat_id> "Hello!" -c orchid.yml
+```
+
+## Common workflows
+
+```bash
+# 1) Try a built-in example with no setup
+orchid chat interactive -c examples/basketball/orchid.yml
+
+# 2) Validate every example (CI-friendly)
+for f in examples/**/agents.yaml examples/**/config/agents.yaml; do
+    orchid config validate "$f"
+done
+
+# 3) Pre-seed RAG with internal documentation
+orchid index dir ./docs/internal -n knowledge_base -c orchid.yml --pattern '*.md'
+
+# 4) Export agents as Claude Code skills for ad-hoc usage
+orchid skill generate examples/restaurant/config/agents.yaml -o ~/.claude/skills
+
+# 5) Drive a non-interactive chat from a shell script
+chat_id=$(orchid chat create -c orchid.yml -t "batch-$(date +%s)" --json | jq -r .id)
+for q in "$@"; do
+    orchid chat send "$chat_id" "$q" -c orchid.yml
+done
 ```
 
 ## Commands
@@ -74,7 +106,7 @@ orchid chat delete <chat_id> -c orchid.yml
 orchid chat delete <chat_id> -c orchid.yml --force
 ```
 
-Chat IDs support **prefix matching** -- type the first few characters of the UUID.
+Chat IDs support **prefix matching** — type the first few characters of the UUID.
 
 ### Messaging
 
@@ -85,6 +117,13 @@ orchid chat send <chat_id> "What is LangGraph?" -c orchid.yml
 # Override the LLM model
 orchid chat send <chat_id> "Explain RAG" -c orchid.yml -m ollama/llama3.2
 ```
+
+The CLI honours every framework feature exposed by the YAML config:
+
+- **Mini-agents** — when an agent has `mini_agent.enabled: true`, the CLI streams the same `mini_agent.{decomposed,started,finished,aggregated}` lifecycle markers the frontend renders, surfaced in the terminal as collapsible sections.
+- **Parallel tools** — `parallel_tools: true` on an agent activates Phase A intra-round parallel dispatch; the CLI doesn't need any special flag.
+- **Prompt customisation** — every `prompt_sections` and `transformer_prompts` override declared in YAML applies inside the CLI just like the API.
+- **Sliding-window summarization** — `supervisor.history_summary_enabled: true` compresses older history before the LLM call. CLI users see the same effect on long chats.
 
 ### Interactive Mode
 
@@ -113,6 +152,8 @@ Slash commands available inside interactive mode:
 # Validate an agents.yaml file
 orchid config validate path/to/agents.yaml
 ```
+
+Validation runs the full Pydantic schema, the defaults-merger pass, and any custom validators registered via the `OrchidAgentsConfig` plugin hooks. Errors include the exact field path and the offending value.
 
 ### MCP Server Authorization
 
@@ -215,6 +256,8 @@ orchid skill generate path/to/agents.yaml --zip
 
 Each agent skill includes a `scripts/` folder with standalone Python scripts that Claude Code can execute directly. Tools from the same source module are grouped into a single script file with a CLI wrapper that accepts `--arg value` arguments.
 
+The skill generator pulls parameter metadata from the YAML `tools:` block when present (per ADR-017's parameter declaration), and falls back to Python signature introspection when omitted.
+
 ## Configuration
 
 The `--config` (`-c`) flag points to an `orchid.yml` file:
@@ -241,6 +284,10 @@ storage:
   class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
   dsn: ~/.orchid/chats.db
 
+# Startup hook (e.g. seeds RAG, registers custom strategies / tools)
+startup:
+  hook: examples.travel-agency.hooks.startup.bootstrap_travel
+
 # LangGraph checkpointer (optional) — enables persistent graph state,
 # required for Human-in-the-Loop tool approval
 checkpointer:
@@ -263,7 +310,7 @@ Chat data is stored in SQLite at `~/.orchid/chats.db` by default. OAuth tokens a
 
 ### Checkpointing
 
-The CLI supports LangGraph checkpointers for persistent graph state. This is **required** when any agent uses Human-in-the-Loop (`requires_approval: true` on tools).
+The CLI supports LangGraph checkpointers for persistent graph state. This is **required** when any agent uses Human-in-the-Loop (`requires_approval: true` on tools) or relies on resume-after-interrupt flows.
 
 ```yaml
 # In orchid.yml
@@ -286,16 +333,16 @@ The CLI supports **OAuth 2.0 Authorization Code + PKCE** for authenticating with
 
 ### How It Works
 
-1. `orchid auth login` opens the system browser to the provider's authorization page
-2. User authenticates and consents
-3. Provider redirects to a temporary `localhost` callback server
-4. CLI exchanges the authorization code for access + refresh tokens (with PKCE verification)
-5. Tokens are stored at `~/.orchid/tokens.json`
-6. All subsequent `orchid chat` commands use the stored token automatically
+1. `orchid auth login` opens the system browser to the provider's authorization page.
+2. User authenticates and consents.
+3. Provider redirects to a temporary `localhost` callback server.
+4. CLI exchanges the authorization code for access + refresh tokens (with PKCE verification).
+5. Tokens are stored at `~/.orchid/tokens.json` with `0o600` permissions.
+6. All subsequent `orchid chat` commands use the stored token automatically.
 
 ### OIDC Discovery
 
-When `issuer` is set in the config, the CLI fetches `{issuer}/.well-known/openid-configuration` to auto-discover `authorization_endpoint` and `token_endpoint`. This is the recommended approach -- you only need the issuer URL.
+When `issuer` is set in the config, the CLI fetches `{issuer}/.well-known/openid-configuration` to auto-discover `authorization_endpoint` and `token_endpoint`. This is the recommended approach — you only need the issuer URL.
 
 ### Token Refresh
 
@@ -303,22 +350,19 @@ When the access token expires and a refresh token is available, the CLI refreshe
 
 ### Identity Resolution
 
-When `identity_resolver_class` is configured, the CLI calls the resolver after login to populate `tenant_key` and `user_id` from the OAuth token. These identity fields are cached in the token file so subsequent commands don't need the resolver. See the [orchid OrchidIdentityResolver ABC](../orchid/orchid_ai/core/identity.py) for the interface.
+When `identity_resolver_class` is configured, the CLI calls the resolver after login to populate `tenant_key` and `user_id` from the OAuth token. These identity fields are cached in the token file so subsequent commands don't need the resolver. See the [`OrchidIdentityResolver` ABC](../orchid/orchid_ai/core/identity.py) for the interface.
 
 > **Note:** the CLI is an **independent OAuth client** — it runs its own
 > authorization-code + PKCE dance against the upstream IdP and calls the
 > identity resolver locally. It does NOT use the
 > centralised `/auth/exchange-code` / `/auth/resolve-identity` /
-> `/auth/refresh-token` endpoints that the MCP gateway uses (Phases 1–5
-> of the [auth-centralisation roadmap](../.knowledge/auth-centralisation.md)).
+> `/auth/refresh-token` endpoints that the MCP gateway uses.
 > The CLI ships with the upstream secret `client_id` baked into its config
-> because it's a desktop app, not a network service. A future migration
-> could route the CLI through the same endpoints to remove the
-> CLI-side `client_secret` / userinfo coupling — out of scope today.
+> because it's a desktop app, not a network service.
 
 ### Dev Fallback
 
-When `auth.dev_bypass: true` or `auth.cli` is absent, the CLI uses a dummy token (`cli-token`, tenant=`cli`, user=`cli-user`). This is fully backward compatible -- existing configs without OAuth continue to work unchanged.
+When `auth.dev_bypass: true` or `auth.cli` is absent, the CLI uses a dummy token (`cli-token`, tenant=`cli`, user=`cli-user`). This is fully backward compatible — existing configs without OAuth continue to work unchanged.
 
 ## Prerequisites
 
@@ -354,7 +398,7 @@ After `pip install mypackage`, the command is available as `orchid mycommand gre
 orchid_cli/
   main.py          Typer entry point — registers built-in + plugin subcommands
   bootstrap.py     Shared startup: load config, build graph, init storage,
-                   wire checkpointer (optional)
+                   wire checkpointer (optional), invoke startup hook
   auth/            OAuth 2.0 authentication (self-contained)
     config.py      Provider settings from orchid.yml
     oidc.py        Shared OIDC discovery utility
@@ -373,7 +417,38 @@ orchid_cli/
     skill.py       Generate Claude Code skills from agents.yaml
 ```
 
-The CLI is a thin layer that calls `orchid` SDK functions and displays results via Rich. The `auth/` subpackage is fully self-contained — no OAuth logic leaks into chat commands or bootstrap. Interactive-mode slash commands use a dispatch table (`_SLASH_COMMANDS` in `chat.py`) so new slash commands can be added with a single handler function.
+`bootstrap.py` mirrors the orchid-api lifespan: load and validate config, build the LangGraph runtime, initialise the storage backend, wire the checkpointer, fire the startup hook (if any). The chat commands then attach an `OrchidAuthContext` per call and enter the supervisor — same primitives orchid-api uses, just without the FastAPI shell.
+
+## Embedded mode (using the SDK directly)
+
+For applications that need Orchid as a library rather than a CLI:
+
+```python
+from orchid_ai import Orchid, OrchidRuntime
+from orchid_ai.config.loader import load_config
+
+config = load_config("orchid.yml")
+runtime = OrchidRuntime.from_config(config)
+async with runtime:
+    answer = await runtime.ask(
+        "Hello!",
+        tenant_id="default",
+        user_id="me",
+        chat_id="chat-1",
+    )
+    print(answer.text)
+```
+
+The CLI uses these primitives internally; embedded users get the same behaviour without the Typer shell. See `examples/embedded-python/` for end-to-end patterns.
+
+## Troubleshooting
+
+- **`Cannot resolve chat storage class '…'`** — the dotted import path in `storage.class` failed to import. Confirm the package is installed and the module path is reachable from `PYTHONPATH`.
+- **`No module named 'aiosqlite'`** — install the SQLite extra: `pip install orchid-ai[checkpoint-sqlite]`.
+- **OAuth `redirect_uri_mismatch`** — register `http://localhost:<port>/callback` (the port the CLI prints on `auth login`) with your IdP. Some IdPs accept the loopback wildcard `http://127.0.0.1`; others require the literal port.
+- **Tokens stored but `auth status` shows expired** — refresh failed. Inspect `~/.orchid/tokens.json` (chmod 600) and re-run `orchid auth login`.
+- **Slow startup with custom LLM provider** — `bootstrap.py` initialises the chat model lazily, but startup hooks run synchronously. Move heavy work behind `if reader and reader.supports_writes:` guards inside the hook.
+- **`No agents loaded`** — likely missing `agents.config_path` in `orchid.yml`. Inline-config users should switch to `agents:` (see `examples/embedded-python/06_inline_config.py`).
 
 ## Development
 
@@ -392,4 +467,4 @@ ruff check orchid_cli/
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
