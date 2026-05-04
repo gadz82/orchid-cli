@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.1 (2026-05-04)
+
+### Bug Fixes
+
+- Broken unit tests by ensuring lock.
+  ([`64f59fa`](https://github.com/gadz82/orchid-cli/commit/64f59fa71f6efe7f2a5fd51c35ea2fb48f6cf8c4))
+
+
 ## v1.2.0 (2026-04-29)
 
 ### Bug Fixes
