@@ -41,7 +41,7 @@
 
 ### Documentation
 
-- **cli**: Clarify CLI OAuth independence and auth-centralisation roadmap context
+- **cli**: Clarify CLI OAuth independence
   ([`da14aa6`](https://github.com/gadz82/orchid-cli/commit/da14aa6dc5b571e63ce7bd10a633133979ceba82))
 
 ### Features
