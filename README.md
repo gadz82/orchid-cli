@@ -4,9 +4,9 @@
 
 <h1 align="center">Orchid CLI</h1>
 
-Command-line interface for the [Orchid](../orchid/) multi-agent AI framework.
+Command-line interface for the [Orchid](https://github.com/gadz82/orchid) multi-agent AI framework.
 
-Provides terminal access to all chat operations, configuration validation, RAG indexing, MCP server authorisation, and Claude Code skill generation. Mirrors the full functionality of [orchid-api](../orchid-api/) but runs locally with no server, Docker, or external database required (defaults to SQLite).
+Provides terminal access to all chat operations, configuration validation, RAG indexing, MCP server authorisation, and Claude Code skill generation. Mirrors the full functionality of [orchid-api](https://github.com/gadz82/orchid-api) but runs locally with no server, Docker, or external database required (defaults to SQLite).
 
 ## Why use the CLI
 
@@ -121,7 +121,7 @@ orchid chat send <chat_id> "Explain RAG" -c orchid.yml -m ollama/llama3.2
 The CLI honours every framework feature exposed by the YAML config:
 
 - **Mini-agents** — when an agent has `mini_agent.enabled: true`, the CLI streams the same `mini_agent.{decomposed,started,finished,aggregated}` lifecycle markers the frontend renders, surfaced in the terminal as collapsible sections.
-- **Parallel tools** — `parallel_tools: true` on an agent activates Phase A intra-round parallel dispatch; the CLI doesn't need any special flag.
+- **Parallel tools** — `parallel_tools: true` on an agent activates intra-round parallel dispatch; the CLI doesn't need any special flag.
 - **Prompt customisation** — every `prompt_sections` and `transformer_prompts` override declared in YAML applies inside the CLI just like the API.
 - **Sliding-window summarization** — `supervisor.history_summary_enabled: true` compresses older history before the LLM call. CLI users see the same effect on long chats.
 
@@ -256,7 +256,7 @@ orchid skill generate path/to/agents.yaml --zip
 
 Each agent skill includes a `scripts/` folder with standalone Python scripts that Claude Code can execute directly. Tools from the same source module are grouped into a single script file with a CLI wrapper that accepts `--arg value` arguments.
 
-The skill generator pulls parameter metadata from the YAML `tools:` block when present (per ADR-017's parameter declaration), and falls back to Python signature introspection when omitted.
+The skill generator pulls parameter metadata from the YAML `tools:` block when present, and falls back to Python signature introspection when omitted.
 
 ## Configuration
 
@@ -350,7 +350,7 @@ When the access token expires and a refresh token is available, the CLI refreshe
 
 ### Identity Resolution
 
-When `identity_resolver_class` is configured, the CLI calls the resolver after login to populate `tenant_key` and `user_id` from the OAuth token. These identity fields are cached in the token file so subsequent commands don't need the resolver. See the [`OrchidIdentityResolver` ABC](../orchid/orchid_ai/core/identity.py) for the interface.
+When `identity_resolver_class` is configured, the CLI calls the resolver after login to populate `tenant_key` and `user_id` from the OAuth token. These identity fields are cached in the token file so subsequent commands don't need the resolver. See the [`OrchidIdentityResolver` ABC](https://github.com/gadz82/orchid/blob/main/orchid_ai/core/identity.py) for the interface.
 
 > **Note:** the CLI is an **independent OAuth client** — it runs its own
 > authorization-code + PKCE dance against the upstream IdP and calls the
