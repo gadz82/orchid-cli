@@ -36,6 +36,7 @@ from rich.console import Console
 from orchid_ai.core.repository import Document, OrchidVectorWriter
 from orchid_ai.documents.chunker import ChunkConfig
 from orchid_ai.documents.pipeline import ingest_document
+from orchid_ai.documents.strategies import RecursiveIngestion
 from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope
 
 from .._typer_async import async_command
@@ -143,7 +144,7 @@ async def _index_file(
     async with cli_context(config_path) as ctx:
         writer = await _require_writer(ctx)
         scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
-        chunk_cfg = ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        ingestion = RecursiveIngestion(ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap))
 
         console.print(f"[dim]Reading {file_path}...[/dim]")
         file_bytes = file_path.read_bytes()
@@ -154,7 +155,7 @@ async def _index_file(
             scope=scope_obj,
             namespace=namespace,
             writer=writer,
-            chunk_config=chunk_cfg,
+            ingestion=ingestion,
             vision_model=vision_model,
         )
 
@@ -233,7 +234,7 @@ async def _index_dir(
     async with cli_context(config_path) as ctx:
         writer = await _require_writer(ctx)
         scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
-        chunk_cfg = ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        ingestion = RecursiveIngestion(ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap))
 
         total_chunks = 0
         successes = 0
@@ -248,7 +249,7 @@ async def _index_dir(
                     scope=scope_obj,
                     namespace=namespace,
                     writer=writer,
-                    chunk_config=chunk_cfg,
+                    ingestion=ingestion,
                     vision_model=vision_model,
                 )
                 if count > 0:
