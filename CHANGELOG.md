@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-05-05)
+
+### Chores
+
+- Bump `orchid-ai` dependency to >=1.6.0 in `orchid-cli` and `orchid-api`
+  ([`2aaedaf`](https://github.com/gadz82/orchid-cli/commit/2aaedafb417294f1780d80464b469467656fcd5d))
+
+### Documentation
+
+- Update Orchid API and MCP gateway README
+  ([`9ff4750`](https://github.com/gadz82/orchid-cli/commit/9ff475005b06857afbc215b68c573b1a8c11a750))
+
+### Features
+
+- **cli**: Enable RecursiveIngestion for RAG index workflows
+  ([`14bf9d4`](https://github.com/gadz82/orchid-cli/commit/14bf9d49b1eb6e5bf613497881765a0554d84f26))
+
+
 ## v1.2.1 (2026-05-04)
 
 ### Bug Fixes
