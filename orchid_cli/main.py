@@ -23,7 +23,18 @@ from __future__ import annotations
 import logging
 import typer
 
-from .commands import auth, chat, config, index, mcp, skill
+from .commands import (
+    auth,
+    chat,
+    config,
+    index,
+    jobs,
+    mcp,
+    runs,
+    schedules,
+    signals,
+    skill,
+)
 from .slash_commands import load_slash_command_plugins
 
 logger = logging.getLogger(__name__)
@@ -41,6 +52,11 @@ app.add_typer(config.app, name="config")
 app.add_typer(index.app, name="index")
 app.add_typer(mcp.app, name="mcp")
 app.add_typer(skill.app, name="skill")
+# Pollen + Bloom (events) ops surface — local-only, mirrors orchid-api.
+app.add_typer(signals.app, name="signals")
+app.add_typer(jobs.app, name="jobs")
+app.add_typer(runs.app, name="runs")
+app.add_typer(schedules.app, name="schedules")
 
 
 # ── Plugin discovery ───────────────────────────────────────────
