@@ -220,6 +220,55 @@ orchid index json-file faqs.json -n support -c orchid.yml
 
 The `file` and `dir` commands use the same ingestion pipeline as the orchid-api `/upload` endpoint (parse → chunk → embed → store). The `text` and `json-file` commands skip chunking and store documents as-is.
 
+### Pollen + Bloom (events)
+
+Local-only ops surface that mirrors the [orchid-api events endpoints](https://github.com/gadz82/orchid-api#pollen--bloom--events-surface). Every command runs in-process against the same dispatcher / queue / store the API would use, so the `events:` block in `agents.yaml` must be `enabled: true` and properly configured before these commands work. **Naming reminder:** *Pollen* is the signal substrate (ingest + queue). *Bloom* is the execution layer (one `JobRun` row per attempt of a matched trigger).
+
+```bash
+# Emit a signal through the local dispatcher
+orchid signals emit support.ticket.created \
+    --payload '{"priority":"high","subject":"VPN down","requester":{"id":"u-42"}}' \
+    --source webhook:support-system \
+    --tenant acme \
+    --correlation-id ticket-2026-0501 \
+    -c orchid.yml
+
+# Inspect signals
+orchid signals list -c orchid.yml --type support.ticket.created --since 1h --limit 20
+orchid signals show <signal_id> -c orchid.yml
+
+# Inspect Bloom runs
+orchid runs list -c orchid.yml --status failed --since 1d
+orchid runs show <run_id> -c orchid.yml
+orchid runs retry <run_id> -c orchid.yml         # re-enqueue → fresh attempt_number
+orchid runs cancel <run_id> -c orchid.yml        # best-effort flag
+
+# Inspect declared triggers + per-trigger run history
+orchid jobs list -c orchid.yml
+orchid jobs runs <trigger_id> -c orchid.yml --status succeeded
+
+# Schedules — list + toggle (cron / interval rows declared in events.schedules[])
+orchid schedules list -c orchid.yml
+orchid schedules show <schedule_id> -c orchid.yml
+orchid schedules enable <schedule_id> -c orchid.yml
+orchid schedules disable <schedule_id> -c orchid.yml
+```
+
+**`signals emit` flags:**
+
+| Flag | Purpose | Default |
+|------|---------|---------|
+| `<type>` (positional) | Signal type — must match an active trigger's `on.signal` | required |
+| `--payload` / `-p` | JSON body. Triggers' `when:` JMESPath expressions run against this | `{}` |
+| `--source` / `-s` | Logical signal source — used together with `--dedupe-key` for the `UNIQUE (source, dedupe_key)` constraint | `cli:orchid` |
+| `--tenant` / `-t` | Tenant key written into the envelope | `default` |
+| `--user` / `-u` | Originating user id — required by triggers using `act_as_user` / `addressed_to_user` identity | — |
+| `--dedupe-key` / `-k` | Idempotency key. A duplicate emit returns the existing `signal_id` with `deduplicated: true` | — |
+| `--correlation-id` | Correlation id linking related signals | — |
+| `--identity` | JSON identity claim override (rare — defaults to the CLI's `OrchidAuthContext`) | — |
+
+The CLI honours the same idempotency, visibility filtering, and audit trail that orchid-api enforces — emitting from the CLI on a Postgres-backed config is exactly the same as POSTing a webhook to `orchid-api`. Use it for: smoke-testing a new trigger before wiring an upstream producer; replaying a single signal during incident triage; bulk-emitting a small fixture set in dev.
+
 ### Skill Generation (Claude Code)
 
 Generate [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) from your Orchid agent configuration. Each agent and orchestrator skill becomes a Claude Code skill directory with a `SKILL.md` file.
@@ -415,9 +464,13 @@ orchid_cli/
                    (shares PKCE flow via oidc.py utility)
     index.py       On-demand RAG seeding: seed, file, dir, text, json-file
     skill.py       Generate Claude Code skills from agents.yaml
+    signals.py     Pollen — emit / list / show signals through the local dispatcher
+    runs.py        Bloom — list / show / retry / cancel JobRun rows
+    jobs.py        Trigger registry inspection + per-trigger runs
+    schedules.py   Schedule list / show / enable / disable
 ```
 
-`bootstrap.py` mirrors the orchid-api lifespan: load and validate config, build the LangGraph runtime, initialise the storage backend, wire the checkpointer, fire the startup hook (if any). The chat commands then attach an `OrchidAuthContext` per call and enter the supervisor — same primitives orchid-api uses, just without the FastAPI shell.
+`bootstrap.py` mirrors the orchid-api lifespan: load and validate config, build the LangGraph runtime, initialise the storage backend, wire the checkpointer, fire the startup hook (if any), and — when the YAML carries an `events:` block with `enabled: true` — boot the same `start_events()` helper that orchid-api uses (resolves dotted paths for store / queue / scheduler / processors / producers, builds the trigger registry, runs the boot-time `act_as_user` mint probe). The chat commands then attach an `OrchidAuthContext` per call and enter the supervisor; the `signals` / `runs` / `jobs` / `schedules` commands talk to the same dispatcher + stores that the API exposes — the only difference is the absence of the FastAPI shell.
 
 ## Embedded mode (using the SDK directly)
 
@@ -449,6 +502,8 @@ The CLI uses these primitives internally; embedded users get the same behaviour 
 - **Tokens stored but `auth status` shows expired** — refresh failed. Inspect `~/.orchid/tokens.json` (chmod 600) and re-run `orchid auth login`.
 - **Slow startup with custom LLM provider** — `bootstrap.py` initialises the chat model lazily, but startup hooks run synchronously. Move heavy work behind `if reader and reader.supports_writes:` guards inside the hook.
 - **`No agents loaded`** — likely missing `agents.config_path` in `orchid.yml`. Inline-config users should switch to `agents:` (see `examples/embedded-python/06_inline_config.py`).
+- **`signals` / `runs` / `jobs` / `schedules` commands fail with `events not enabled`** — the `events:` block in `agents.yaml` is missing or `enabled: false`. Set `events.enabled: true` and supply at minimum `events.store`, `events.queue`, and one entry under `events.processors` (see the [orchid `events:` reference](https://github.com/gadz82/orchid#events-pollen--bloom--optional-opt-in)).
+- **`MintingProbeUnsupportedError` at startup** — a trigger declares `identity.mode: act_as_user` but the configured `OrchidIdentityResolver` does not implement `mint_for_user`. Either switch the trigger to a service-account identity or wire a resolver that mints.
 
 ## Development
 
