@@ -220,7 +220,7 @@ orchid index json-file faqs.json -n support -c orchid.yml
 
 The `file` and `dir` commands use the same ingestion pipeline as the orchid-api `/upload` endpoint (parse → chunk → embed → store). The `text` and `json-file` commands skip chunking and store documents as-is.
 
-### Pollen + Bloom (events)
+### Pollen & Bloom (events)
 
 Local-only ops surface that mirrors the [orchid-api events endpoints](https://github.com/gadz82/orchid-api#pollen--bloom--events-surface). Every command runs in-process against the same dispatcher / queue / store the API would use, so the `events:` block in `agents.yaml` must be `enabled: true` and properly configured before these commands work. **Naming reminder:** *Pollen* is the signal substrate (ingest + queue). *Bloom* is the execution layer (one `JobRun` row per attempt of a matched trigger).
 
