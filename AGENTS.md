@@ -19,6 +19,9 @@ orchid-cli/
     commands/
       _session.py    resolve_session(config_path) -> (Orchid, OrchidAuthContext) +
                      warm_for_user — single chokepoint for bootstrap + auth + MCP warm
+      _events_session.py
+                     resolve_events_session(config_path) -> (Orchid, EventsRuntime)
+                     used by the four event commands; raises when ``events.enabled=false``
       auth.py        login, logout, status subcommands
       chat.py        Full CRUD: create, list, delete, history, send, interactive, rename, share
       config.py      validate command (checks agents.yaml)
@@ -26,6 +29,10 @@ orchid-cli/
       mcp.py         MCP OAuth: status, revoke per-server tokens
                      (authorize flow runs through the API gateway, not the CLI)
       skill.py       generate command (Claude Code skills from agents.yaml)
+      signals.py     Pollen ops: emit / list / show
+      jobs.py        Bloom ops: list triggers, list runs per trigger
+      runs.py        Bloom ops: list / show / retry / cancel
+      schedules.py   Bloom ops: list / show / disable / enable
   pyproject.toml
 ```
 
@@ -98,7 +105,43 @@ orchid skill generate <agents.yaml> -o ./out   # Custom output directory
 orchid skill generate <agents.yaml> --include agent1,agent2  # Filter by name
 orchid skill generate <agents.yaml> --overwrite              # Overwrite existing
 orchid skill generate <agents.yaml> --zip                    # Create zip archive
+
+# Pollen + Bloom ops surface — local-only, requires events.enabled: true in YAML.
+orchid signals emit <type> [--payload JSON|@file] [--source S] [--tenant T] [--user U] [--dedupe-key K] [--identity JSON] -c <orchid.yml>
+orchid signals list [--type T] [--tenant T] [--since 15m|2h|1d|ISO] [--limit N] -c <orchid.yml>
+orchid signals show <signal_id> -c <orchid.yml>
+
+orchid jobs list -c <orchid.yml>                         # Active triggers
+orchid jobs runs <trigger_id> [--status s] [--limit N] -c <orchid.yml>
+
+orchid runs list [--status s] [--trigger-id t] [--since 1h] [--limit N] -c <orchid.yml>
+orchid runs show <run_id> -c <orchid.yml>
+orchid runs retry <run_id> -c <orchid.yml>               # Re-enqueue originating signal
+orchid runs cancel <run_id> -c <orchid.yml>              # Best-effort cancel
+
+orchid schedules list -c <orchid.yml>
+orchid schedules show <schedule_id> -c <orchid.yml>
+orchid schedules disable <schedule_id> -c <orchid.yml>
+orchid schedules enable <schedule_id> -c <orchid.yml>
 ```
+
+### Pollen + Bloom local-mode notes
+
+- Every `orchid signals/jobs/runs/schedules` command runs the events
+  block **locally** against the same SQLite/Postgres backend the YAML
+  configures — same pattern as `orchid chat send`, NOT an HTTP client.
+- Long-running producers (`SchedulerProducer`, `HTTPIngestionProducer`,
+  `RelayRecoveryProducer`) declared in YAML do NOT start under the
+  CLI — short-lived invocations explicitly stop them so a one-shot
+  `orchid signals emit` doesn't leave a scheduler firing in the
+  background. Operators wanting a long-running producer should run
+  `orchid-api` instead.
+- Visibility filtering (§26) is enforced at the API layer.  The CLI
+  is a local operator tool; operators inspecting via the CLI already
+  have direct DB access, so a parallel filter would be theatre.
+- `orchid schedules disable/enable` writes to `OrchidScheduleStore`
+  durably; the next `SchedulerProducer.refresh()` (or process
+  restart of `orchid-api`) picks up the change.
 
 ### Interactive Mode Slash Commands
 
