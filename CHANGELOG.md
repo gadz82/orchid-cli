@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-05-10)
+
+### Bug Fixes
+
+- Test imports error
+  ([`c9b9f54`](https://github.com/gadz82/orchid-cli/commit/c9b9f5484e2c761461594370ff4cd4aab2a75d94))
+
+### Chores
+
+- Bump orchid-ai dependency to v1.7.0
+  ([`65e43a0`](https://github.com/gadz82/orchid-cli/commit/65e43a0e5e5019ce4fc95b824bb0c7a093d7cc06))
+
+- Bump orchid-ai dependency to v1.7.1
+  ([`8057525`](https://github.com/gadz82/orchid-cli/commit/80575253bf8e5513895ae95c2a849e109e2cbd0b))
+
+### Documentation
+
+- Add Pollen and Bloom operator panel, in-chat progress, and CLI tools
+  ([`54d0666`](https://github.com/gadz82/orchid-cli/commit/54d0666ad33fe6e719eb190141b76f99cc95a3e8))
+
+### Features
+
+- Implement Pollen + Bloom subsystem and endpoints for event-driven workflows
+  ([`3885374`](https://github.com/gadz82/orchid-cli/commit/38853740971688a04b57d561020ab6b1b7cb6bc3))
+
+### Refactoring
+
+- **docs**: Remove phased rollout references for streamlined documentation
+  ([`db0d5b5`](https://github.com/gadz82/orchid-cli/commit/db0d5b54b05c6559f2e33e352b8736e1ace91044))
+
+
 ## v1.3.0 (2026-05-05)
 
 ### Chores
