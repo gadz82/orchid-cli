@@ -12,9 +12,17 @@ clean shutdown.
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 
 from orchid_ai import Orchid
+
+# Register the ChromaDB vector backend so ``vector_backend="chroma"``
+# resolves through ``build_reader()``.  Import is intentionally at
+# module level so the registration happens before any ``Orchid``
+# construction.
+import orchid_cli.rag  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +32,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
 DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
 DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore"
+
+# ChromaDB defaults — zero-infrastructure RAG for the CLI.
+DEFAULT_VECTOR_BACKEND = "chroma"
+DEFAULT_CHROMA_PATH = "~/.orchid/chroma"
 
 
 def apply_cli_config(config_path: str) -> None:
@@ -47,6 +59,7 @@ async def bootstrap(
     vector_backend: str = "",
     qdrant_url: str = "",
     embedding_model: str = "",
+    chroma_path: str = "",
     chat_storage_class: str = "",
     chat_db_dsn: str = "",
     chat_extra_migrations_package: str | None = None,
@@ -72,6 +85,20 @@ async def bootstrap(
     aiosqlite / checkpointer / token-store connections are released
     before the event loop exits.
     """
+    # Ensure CWD is importable — console-script invocations may run
+    # without the working directory on sys.path, breaking startup-hook
+    # import paths like ``examples.recipes.hooks.startup.seed_recipes``.
+    cwd = os.getcwd()
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
+    # Resolve CLI-specific defaults (Chroma first) and seed env vars so
+    # downstream code (including ``build_reader``) sees them.
+    resolved_backend = vector_backend or os.environ.get("VECTOR_BACKEND", DEFAULT_VECTOR_BACKEND)
+    resolved_chroma = chroma_path or os.environ.get("CHROMA_PATH", DEFAULT_CHROMA_PATH)
+    os.environ.setdefault("VECTOR_BACKEND", resolved_backend)
+    os.environ.setdefault("CHROMA_PATH", resolved_chroma)
+
     # CLI convention: storage block in YAML does NOT override our SQLite
     # default.  Everything else in YAML → env propagates as usual.
     orchid = await Orchid.from_config_path(
@@ -79,7 +106,7 @@ async def bootstrap(
         apply_yaml=bool(config_path),
         skip_yaml_sections={"storage"},
         model=model,
-        vector_backend=vector_backend,
+        vector_backend=resolved_backend,
         qdrant_url=qdrant_url,
         embedding_model=embedding_model,
         chat_storage_class=chat_storage_class,
