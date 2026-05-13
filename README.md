@@ -520,6 +520,10 @@ pytest tests/ -x
 ruff check orchid_cli/
 ```
 
+## Related Projects
+
+- **[orchid-examples](https://github.com/gadz82/orchid-examples)** — Example configurations, custom agents, and integration patterns
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
