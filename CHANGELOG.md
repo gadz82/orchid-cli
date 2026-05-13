@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-05-13)
+
+### Documentation
+
+- **cli**: Add related projects section to README
+  ([`a5cb970`](https://github.com/gadz82/orchid-cli/commit/a5cb9708629d68ad7b83a43f8edbd01775d32116))
+
+### Features
+
+- **cli**: Add ChromaDB vector backend with scoped filtering and metadata translation
+  ([`fd0feb3`](https://github.com/gadz82/orchid-cli/commit/fd0feb3d0666c3819852d562d7b31578f36c4a97))
+
+
 ## v1.4.0 (2026-05-10)
 
 ### Bug Fixes
