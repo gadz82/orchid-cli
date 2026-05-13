@@ -45,10 +45,11 @@ orchid chat send <chat_id> "Hello!" -c orchid.yml
 
 ```bash
 # 1) Try a built-in example with no setup
-orchid chat interactive -c examples/basketball/orchid.yml
+# Clone examples repo first: git clone https://github.com/gadz82/orchid-examples
+orchid chat interactive -c orchid-examples/basketball/orchid.yml
 
 # 2) Validate every example (CI-friendly)
-for f in examples/**/agents.yaml examples/**/config/agents.yaml; do
+for f in orchid-examples/**/agents.yaml orchid-examples/**/config/agents.yaml; do
     orchid config validate "$f"
 done
 
@@ -56,7 +57,7 @@ done
 orchid index dir ./docs/internal -n knowledge_base -c orchid.yml --pattern '*.md'
 
 # 4) Export agents as Claude Code skills for ad-hoc usage
-orchid skill generate examples/restaurant/config/agents.yaml -o ~/.claude/skills
+orchid skill generate orchid-examples/restaurant/config/agents.yaml -o ~/.claude/skills
 
 # 5) Drive a non-interactive chat from a shell script
 chat_id=$(orchid chat create -c orchid.yml -t "batch-$(date +%s)" --json | jq -r .id)
@@ -492,7 +493,7 @@ async with runtime:
     print(answer.text)
 ```
 
-The CLI uses these primitives internally; embedded users get the same behaviour without the Typer shell. See `examples/embedded-python/` for end-to-end patterns.
+The CLI uses these primitives internally; embedded users get the same behaviour without the Typer shell. See [orchid-examples/embedded-python](https://github.com/gadz82/orchid-examples/tree/main/embedded-python) for end-to-end patterns.
 
 ## Troubleshooting
 
@@ -501,15 +502,15 @@ The CLI uses these primitives internally; embedded users get the same behaviour 
 - **OAuth `redirect_uri_mismatch`** — register `http://localhost:<port>/callback` (the port the CLI prints on `auth login`) with your IdP. Some IdPs accept the loopback wildcard `http://127.0.0.1`; others require the literal port.
 - **Tokens stored but `auth status` shows expired** — refresh failed. Inspect `~/.orchid/tokens.json` (chmod 600) and re-run `orchid auth login`.
 - **Slow startup with custom LLM provider** — `bootstrap.py` initialises the chat model lazily, but startup hooks run synchronously. Move heavy work behind `if reader and reader.supports_writes:` guards inside the hook.
-- **`No agents loaded`** — likely missing `agents.config_path` in `orchid.yml`. Inline-config users should switch to `agents:` (see `examples/embedded-python/06_inline_config.py`).
+- **`No agents loaded`** — likely missing `agents.config_path` in `orchid.yml`. Inline-config users should switch to `agents:` (see [orchid-examples/embedded-python/06_inline_config.py](https://github.com/gadz82/orchid-examples/blob/main/embedded-python/06_inline_config.py)).
 - **`signals` / `runs` / `jobs` / `schedules` commands fail with `events not enabled`** — the `events:` block in `agents.yaml` is missing or `enabled: false`. Set `events.enabled: true` and supply at minimum `events.store`, `events.queue`, and one entry under `events.processors` (see the [orchid `events:` reference](https://github.com/gadz82/orchid#events-pollen--bloom--optional-opt-in)).
 - **`MintingProbeUnsupportedError` at startup** — a trigger declares `identity.mode: act_as_user` but the configured `OrchidIdentityResolver` does not implement `mint_for_user`. Either switch the trigger to a service-account identity or wire a resolver that mints.
 
 ## Development
 
 ```bash
-pip install -e ../orchid -e ".[dev]"
-orchid config validate ../examples/basketball/agents.yaml
+pip install -e orchid-ai -e orchid-cli
+orchid config validate orchid-examples/basketball/agents.yaml
 ```
 
 ## Testing
