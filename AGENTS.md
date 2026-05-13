@@ -161,11 +161,14 @@ Chat ID prefix matching is supported (type first few chars of UUID).
 | Parameter | Default | Env Override |
 |-----------|---------|-------------|
 | LLM model | `ollama/llama3.2` | `LITELLM_MODEL` |
-| Vector backend | `qdrant` | `VECTOR_BACKEND` |
+| Vector backend | `chroma` | `VECTOR_BACKEND` |
+| Chroma path | `~/.orchid/chroma` | `CHROMA_PATH` |
 | Qdrant URL | `http://qdrant:6333` | `QDRANT_URL` |
 | Embedding model | `text-embedding-3-small` | `EMBEDDING_MODEL` |
 | Storage class | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
+
+The CLI defaults to **ChromaDB** (local, on-disk) for zero-infrastructure RAG. Set `VECTOR_BACKEND=qdrant` to use Qdrant instead (e.g. when hybrid sparse+dense search is required).
 
 ## OAuth Configuration
 
