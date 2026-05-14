@@ -42,11 +42,17 @@ def apply_cli_config(config_path: str) -> None:
     """Apply ``orchid.yml`` values to env vars, honouring the CLI's
     ``skip_sections={"storage"}`` convention.
 
+    Silently skips ``.md`` files — Markdown config applies its own
+    env-var mapping through :class:`orchid_ai.Orchid`.
+
     Call this explicitly at command entry points (before :func:`bootstrap`)
     to make env-var mutation an obvious, visible step.  :func:`bootstrap`
     still calls it internally — a second call is idempotent because
     :func:`apply_yaml_to_env` only sets vars that are not already present.
     """
+    if config_path.endswith(".md"):
+        return
+
     from orchid_ai.config.yaml_env import apply_yaml_to_env
 
     apply_yaml_to_env(config_path, skip_sections={"storage"})
