@@ -18,6 +18,8 @@ from rich.console import Console
 
 from orchid_ai.core.state import OrchidAuthContext
 
+from .._cancellation import CancelScope
+
 console = Console()
 
 
@@ -59,14 +61,19 @@ async def send_message(
     graph_config: dict = {"configurable": {"thread_id": chat_id}}
 
     if streaming:
-        response_text, agents_used = await stream_graph(ctx, initial_state, config=graph_config)
+        with CancelScope(watch_esc=True) as scope:
+            response_text, agents_used, cancelled = await stream_graph(
+                ctx, initial_state, config=graph_config, cancel_scope=scope
+            )
     else:
         result = await invoke_with_approval(ctx, initial_state, graph_config)
         response_text = result.get("final_response", "No response generated.")
         agents_used = result.get("active_agents", [])
+        cancelled = False
 
     await ctx.chat_repo.add_message(chat_id, "user", message)
-    await ctx.chat_repo.add_message(chat_id, "assistant", response_text, agents_used=agents_used)
+    metadata = {"cancelled": True} if cancelled else None
+    await ctx.chat_repo.add_message(chat_id, "assistant", response_text, agents_used=agents_used, metadata=metadata)
 
     if not history_rows:
         title = message[:50].strip()
@@ -101,9 +108,13 @@ async def _refresh_mcp_auth_status(ctx, auth: OrchidAuthContext) -> dict[str, bo
 async def invoke_with_approval(ctx, initial_state: dict, graph_config: dict) -> dict:
     """Invoke the graph, handling HITL tool approval interrupts.
 
-    When the graph pauses for tool approval (``GraphInterrupt``), the
+    When the graph pause for tool approval (``GraphInterrupt``), the
     user is prompted in the terminal.  On approval the graph resumes;
     on denial the tool is skipped.
+
+    Note: non-streaming cancellation (Ctrl+C / ESC) is deferred.  A
+    future iteration would wrap ``graph.ainvoke()`` in an
+    ``asyncio.Task`` so the SIGINT handler can call ``task.cancel()``.
     """
     from langgraph.errors import GraphInterrupt
     from langgraph.types import Command
@@ -144,7 +155,8 @@ async def stream_graph(
     initial_state: dict,
     *,
     config: dict | None = None,
-) -> tuple[str, list[str]]:
+    cancel_scope: CancelScope | None = None,
+) -> tuple[str, list[str], bool]:
     """Stream graph execution with live Markdown rendering.
 
     The supervisor node can be invoked **multiple times** in one graph
@@ -195,6 +207,13 @@ async def stream_graph(
             config=config,
             stream_mode=["messages", "values"],
         ):
+            if cancel_scope is not None:
+                await cancel_scope.check_esc()
+                if cancel_scope.cancelled:
+                    if response_parts:
+                        live.update(Markdown("".join(response_parts) + "\n\n[dim]⏹ Cancelled[/dim]"))
+                    break
+
             if mode == "values":
                 if isinstance(payload, dict):
                     fr = payload.get("final_response")
@@ -246,4 +265,5 @@ async def stream_graph(
             live.update(Markdown(direct_final))
 
     full_response = "".join(response_parts).strip() or "No response generated."
-    return full_response, sorted(seen_agents)
+    cancelled = cancel_scope is not None and cancel_scope.cancelled if cancel_scope else False
+    return full_response, sorted(seen_agents), cancelled
