@@ -34,7 +34,7 @@ class CancelScope:
     watch_esc: bool = field(default=False)
     _original_handler: Any = field(default=None, init=False)
     _original_tty: Any = field(default=None, init=False)
-    _fd: int = field(default=0, init=False)
+    _fd: int | None = field(default=None, init=False)
 
     def __enter__(self) -> CancelScope:
         self._original_handler = signal.signal(signal.SIGINT, self._handler)
@@ -60,7 +60,7 @@ class CancelScope:
             if await scope.check_esc():
                 break
         """
-        if not self._fd or self.cancelled:
+        if self._fd is None or self.cancelled:
             return self.cancelled
         try:
             readable, _, _ = select.select([sys.stdin], [], [], 0)

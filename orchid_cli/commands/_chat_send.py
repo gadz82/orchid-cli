@@ -108,7 +108,7 @@ async def _refresh_mcp_auth_status(ctx, auth: OrchidAuthContext) -> dict[str, bo
 async def invoke_with_approval(ctx, initial_state: dict, graph_config: dict) -> dict:
     """Invoke the graph, handling HITL tool approval interrupts.
 
-    When the graph pause for tool approval (``GraphInterrupt``), the
+    When the graph pauses for tool approval (``GraphInterrupt``), the
     user is prompted in the terminal.  On approval the graph resumes;
     on denial the tool is skipped.
 
@@ -265,5 +265,5 @@ async def stream_graph(
             live.update(Markdown(direct_final))
 
     full_response = "".join(response_parts).strip() or "No response generated."
-    cancelled = cancel_scope is not None and cancel_scope.cancelled if cancel_scope else False
+    cancelled = cancel_scope is not None and cancel_scope.cancelled
     return full_response, sorted(seen_agents), cancelled

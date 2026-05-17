@@ -50,7 +50,9 @@ def apply_cli_config(config_path: str) -> None:
     still calls it internally — a second call is idempotent because
     :func:`apply_yaml_to_env` only sets vars that are not already present.
     """
-    if config_path.endswith(".md"):
+    from pathlib import Path
+
+    if Path(config_path).suffix.lower() == ".md":
         return
 
     from orchid_ai.config.yaml_env import apply_yaml_to_env
