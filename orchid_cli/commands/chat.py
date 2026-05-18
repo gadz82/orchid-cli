@@ -160,6 +160,9 @@ async def history(
                 console.print(Markdown(msg.content))
                 if msg.agents_used:
                     console.print(f"  [dim]Agents: {', '.join(msg.agents_used)}[/dim]")
+                cancelled = (msg.metadata or {}).get("cancelled", False)
+                if cancelled:
+                    console.print("  [dim red]⏹ Cancelled[/dim red]")
             else:
                 console.print(f"[dim]{msg.role}: {msg.content}[/dim]")
             console.print()
