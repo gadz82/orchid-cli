@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-05-18)
+
+### Bug Fixes
+
+- Remove redundant CLAUDE.md symlinks across modules [skip ci]
+  ([`d3b9117`](https://github.com/gadz82/orchid-cli/commit/d3b9117fecc552359ba871969053e4df2a2556a2))
+
+### Features
+
+- Update orchid-ai dependency to version 1.7.4
+  ([`c56cd7b`](https://github.com/gadz82/orchid-cli/commit/c56cd7beb1d2cfe2f7b9b8e72363d75348e42b41))
+
+- **cli**: Add tests for CancelScope, improve cancellation handling and file type checks
+  ([`038d8c5`](https://github.com/gadz82/orchid-cli/commit/038d8c5ebecdffec40465d2e9b4fa5530481e8ee))
+
+- **cli**: Skip .md files in apply_cli_config and add tests for file type handling
+  ([`a4bc32c`](https://github.com/gadz82/orchid-cli/commit/a4bc32cdfaaad9a5ddd1a62bd523dce26174e236))
+
+
 ## v1.5.0 (2026-05-13)
 
 ### Documentation
