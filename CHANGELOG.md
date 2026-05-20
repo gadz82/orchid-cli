@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.7.0 (2026-05-20)
+
+### Features
+
+- Orchid generate flower command utility
+  ([`7e48918`](https://github.com/gadz82/orchid-cli/commit/7e489184a21264b300f92b57087c705bceef2c9d))
+
+- Orchid generate flower tests
+  ([`367151a`](https://github.com/gadz82/orchid-cli/commit/367151a39d7c2ba53f4e35f723bf9869de6f9be4))
+
+
 ## v1.6.0 (2026-05-18)
 
 ### Bug Fixes
