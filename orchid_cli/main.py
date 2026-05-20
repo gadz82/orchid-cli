@@ -27,6 +27,7 @@ from .commands import (
     auth,
     chat,
     config,
+    generate_flower,
     index,
     jobs,
     mcp,
@@ -49,6 +50,7 @@ app = typer.Typer(
 app.add_typer(auth.app, name="auth")
 app.add_typer(chat.app, name="chat")
 app.add_typer(config.app, name="config")
+app.add_typer(generate_flower.app, name="generate-flower")
 app.add_typer(index.app, name="index")
 app.add_typer(mcp.app, name="mcp")
 app.add_typer(skill.app, name="skill")
