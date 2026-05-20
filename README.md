@@ -308,6 +308,69 @@ Each agent skill includes a `scripts/` folder with standalone Python scripts tha
 
 The skill generator pulls parameter metadata from the YAML `tools:` block when present, and falls back to Python signature introspection when omitted.
 
+### Project Scaffolding (generate-flower)
+
+Interactive wizard that guides you through creating a complete Orchid project skeleton — `orchid.yml`, `agents.yaml`, and Python scaffold files — packaged as a zip or written directly to a directory.
+
+```bash
+# Start the interactive wizard
+orchid generate-flower
+
+# Write directly to a directory (no zip)
+orchid generate-flower --no-zip --output ./my-project
+
+# With AI assistance (explains options, suggests values)
+orchid generate-flower --ai --ai-model openai/gpt-4o
+
+# Reproduce a previous project from a seed file
+orchid generate-flower --from-seed answers.json
+
+# Verbose mode (shows all questions, even with defaults)
+orchid generate-flower --verbose
+```
+
+**Wizard phases:**
+
+| Phase | What it configures |
+|---|---|
+| Project Identity | Name, description, output directory |
+| Infrastructure | LLM provider/model, auth mode, vector backend, embedding model, storage, uploads, checkpointer, tracing |
+| Supervisor | Assistant name, routing model, history limits, summarization |
+| Agents | Name, description, system prompt, custom class, RAG, MCP servers, tools, skills, guardrails, mini-agents, children |
+| Global Tools | Tool name, handler, parameters, RAG injection, approval |
+| Cross-Agent Skills | Skill name, description, agent/instruction steps |
+| Global Guardrails | Input rules (prompt injection, content safety, max length, topic restriction), output rules (PII detection, content safety) |
+| Events (Pollen + Bloom) | Store/queue/scheduler backends, producers, processors, schedules, triggers |
+| MCP Gateway | Tool title/description overrides, prompt templates |
+
+**Generated structure:**
+
+```
+my_project/
+├── __init__.py
+├── orchid.yml
+├── agents.yaml
+├── README.md
+├── agents/
+│   ├── __init__.py
+│   └── {custom_agent}.py
+├── tools/
+│   ├── __init__.py
+│   └── {tool_name}.py
+├── identity.py              # if custom auth selected
+├── hooks/
+│   ├── __init__.py
+│   └── {hook_name}.py
+├── storage/
+│   ├── __init__.py
+│   └── {storage_name}.py
+└── tests/
+    ├── __init__.py
+    └── test_agents.py
+```
+
+All generated YAML is schema-validated before output. All generated Python files include `from __future__ import annotations` and follow project SOLID conventions. The review phase lets you inspect and edit any answer before finalizing.
+
 ## Configuration
 
 The `--config` (`-c`) flag points to an `orchid.yml` file:
