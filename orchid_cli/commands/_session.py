@@ -30,6 +30,7 @@ async def resolve_session(
     config_path: str,
     *,
     model: str = "",
+    content_paths: list[str] | None = None,
 ) -> tuple[Orchid, OrchidAuthContext]:
     """Bootstrap Orchid + resolve auth + warm passthrough/oauth caches.
 
@@ -43,7 +44,7 @@ async def resolve_session(
     start lifecycle concentrated in one place (DRY + DIP, identical
     rule to ``orchid-api/auth.py``'s lazy backstop).
     """
-    orchid = await bootstrap(config_path, model=model)
+    orchid = await bootstrap(config_path, model=model, content_paths=content_paths)
     auth = await get_auth_context(config_path)
     try:
         report = await orchid.session_warmer.warm_for_user(auth)
@@ -60,14 +61,14 @@ async def resolve_session(
 
 
 @asynccontextmanager
-async def session_context(config_path: str, *, model: str = ""):
+async def session_context(config_path: str, *, model: str = "", content_paths: list[str] | None = None):
     """Async context manager wrapping :func:`resolve_session`.
 
     Mirrors :func:`orchid_cli.bootstrap.cli_context` but yields both
     the ``Orchid`` and the resolved ``OrchidAuthContext``.  Closing
     ``orchid`` is guaranteed even if the wrapped block raises.
     """
-    orchid, auth = await resolve_session(config_path, model=model)
+    orchid, auth = await resolve_session(config_path, model=model, content_paths=content_paths)
     try:
         yield orchid, auth
     finally:

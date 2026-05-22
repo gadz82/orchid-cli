@@ -213,9 +213,10 @@ async def send(
     message: str = typer.Argument(..., help="The message to send"),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
+    content_path: list[str] = typer.Option([], "--content-path", help="Path(s) to content directories (repeatable)"),
 ) -> None:
     """Send a message to a chat and print the response."""
-    async with session_context(config, model=model) as (ctx, auth):
+    async with session_context(config, model=model, content_paths=content_path or None) as (ctx, auth):
         resolved_id = await resolve_chat_id(ctx, chat_id, auth)
         if not resolved_id:
             return
@@ -236,6 +237,7 @@ async def interactive(
     chat_id: Optional[str] = typer.Argument(None, help="Chat ID to resume (or prefix). Creates new if omitted."),
     config: str = typer.Option("", "--config", "-c", help="Path to orchid.yml"),
     model: str = typer.Option("", "--model", "-m", help="Override LLM model"),
+    content_path: list[str] = typer.Option([], "--content-path", help="Path(s) to content directories (repeatable)"),
 ) -> None:
     """Start an interactive chat REPL with full persistence."""
-    await run_repl(chat_id, config, model)
+    await run_repl(chat_id, config, model, content_paths=content_path or None)
