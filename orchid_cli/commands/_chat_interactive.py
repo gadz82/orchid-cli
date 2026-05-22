@@ -133,9 +133,11 @@ async def _dispatch_slash_command(
 # ── REPL ───────────────────────────────────────────────────
 
 
-async def run_repl(chat_id: str | None, config_path: str, model: str) -> None:
+async def run_repl(
+    chat_id: str | None, config_path: str, model: str, *, content_paths: list[str] | None = None
+) -> None:
     """Resolve the session, optionally pick a chat, then run the REPL loop."""
-    async with session_context(config_path, model=model) as (ctx, auth):
+    async with session_context(config_path, model=model, content_paths=content_paths) as (ctx, auth):
         if chat_id:
             resolved_id = await resolve_chat_id(ctx, chat_id, auth)
             if not resolved_id:

@@ -15,8 +15,10 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from orchid_ai import Orchid
+from orchid_ai.content.local import LocalFileContentSource
 
 # Register the ChromaDB vector backend so ``vector_backend="chroma"``
 # resolves through ``build_reader()``.  Import is intentionally at
@@ -71,6 +73,7 @@ async def bootstrap(
     chat_storage_class: str = "",
     chat_db_dsn: str = "",
     chat_extra_migrations_package: str | None = None,
+    content_paths: list[str] | None = None,
 ) -> Orchid:
     """Build an :class:`Orchid` instance with CLI-friendly defaults.
 
@@ -109,6 +112,12 @@ async def bootstrap(
 
     # CLI convention: storage block in YAML does NOT override our SQLite
     # default.  Everything else in YAML → env propagates as usual.
+
+    # Build content sources from --content-path CLI args
+    content_sources = None
+    if content_paths:
+        content_sources = [LocalFileContentSource(path=str(Path(p).resolve())) for p in content_paths]
+
     orchid = await Orchid.from_config_path(
         config_path=config_path,
         apply_yaml=bool(config_path),
@@ -120,6 +129,7 @@ async def bootstrap(
         chat_storage_class=chat_storage_class,
         chat_db_dsn=chat_db_dsn,
         chat_extra_migrations_package=chat_extra_migrations_package,
+        content_sources=content_sources,
     )
 
     # Warm ``auth.mode: none`` MCP capabilities up front so the user
