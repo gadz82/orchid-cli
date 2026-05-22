@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.8.0 (2026-05-22)
+
+### Bug Fixes
+
+- Update orchid-ai dependency to version 1.8.2
+  ([`feee011`](https://github.com/gadz82/orchid-cli/commit/feee0113ddcc3ff6d0ff94daa21ddab2e4aef309))
+
+### Features
+
+- **cli**: Add content path support for REPL and chat commands
+  ([`1f4510b`](https://github.com/gadz82/orchid-cli/commit/1f4510b28f7cfbbc69fc39809115a6fbdfc07d2a))
+
+
 ## v1.7.0 (2026-05-20)
 
 ### Features
