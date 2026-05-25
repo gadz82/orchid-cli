@@ -217,7 +217,7 @@ def _build_orchid_yml(answers: dict) -> str:
     if storage_backend == "custom":
         storage_class = answers.get("infrastructure.storage_class", "")
     elif storage_backend == "postgresql":
-        storage_class = "orchid_ai.persistence.postgres.OrchidPostgresChatStorage"
+        storage_class = "orchid_storage_postgres.OrchidPostgresChatStorage"
     else:
         storage_class = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
 
