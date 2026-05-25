@@ -12,7 +12,8 @@ Provides terminal access to all chat operations, configuration validation, RAG i
 
 - **Embedded workflows** — the CLI runs the same Orchid runtime as the API but in-process. Useful for batch jobs, scripted pipelines, and offline environments.
 - **Identical config surface** — point at any `orchid.yml` / `agents.yaml` pair (basketball, restaurant, helpdesk, your own) and the CLI behaves the way orchid-api does, minus the HTTP layer.
-- **No infrastructure required** — defaults to SQLite chat storage and the in-process vector reader. Add Qdrant / Postgres only when you need them.
+- **Zero-infrastructure RAG** — defaults to ChromaDB (via `orchid-rag-chroma` plugin) for on-disk vector storage. Add Qdrant / Neo4j only when you need them.
+- **No infrastructure required** — defaults to SQLite chat storage. Add Postgres via `orchid-storage-postgres` only when you need it.
 - **Plugin extensible** — register custom subcommands via Python entry points without forking.
 - **Skill export** — turn an `agents.yaml` into a set of Claude Code skill folders so the same agents are usable from `claude` directly.
 
@@ -21,6 +22,8 @@ Provides terminal access to all chat operations, configuration validation, RAG i
 ```bash
 pip install orchid-ai orchid-cli
 ```
+
+`orchid-cli` bundles `orchid-rag-chroma` as a dependency for zero-infrastructure RAG (ChromaDB on-disk). Install additional plugins for other backends:
 
 The `orchid` command is available after installation.
 
@@ -413,7 +416,8 @@ checkpointer:
 | Parameter | Default | Env Override |
 |-----------|---------|-------------|
 | LLM model | `ollama/llama3.2` | `LITELLM_MODEL` |
-| Vector backend | `qdrant` | `VECTOR_BACKEND` |
+| Vector backend | `chroma` (via orchid-rag-chroma plugin) | `VECTOR_BACKEND` |
+| ChromaDB path | `~/.orchid/chroma` | `CHROMA_PATH` |
 | Storage class | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
 | Checkpointer | disabled | `CHECKPOINTER_TYPE` / `CHECKPOINTER_DSN` |
