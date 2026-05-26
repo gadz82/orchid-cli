@@ -6,8 +6,9 @@ import pytest
 
 from orchid_ai.config.tool_registry import (
     ToolParameter,
-    _REGISTRY,
+    TOOL_REGISTRY,
     register_tool,
+    clear as clear_tool_registry,
 )
 from orchid_cli.commands._tool_metadata import (
     ChainedToolMetadataSource,
@@ -19,10 +20,11 @@ from orchid_cli.commands._tool_metadata import (
 
 @pytest.fixture(autouse=True)
 def _isolate_registry():
-    snapshot = dict(_REGISTRY)
+    snapshot = TOOL_REGISTRY.get_all()
     yield
-    _REGISTRY.clear()
-    _REGISTRY.update(snapshot)
+    clear_tool_registry()
+    for tool in snapshot.values():
+        TOOL_REGISTRY.register(tool)
 
 
 # ── Module-level function used by InspectToolMetadataSource tests ──
