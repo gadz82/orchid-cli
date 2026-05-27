@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v1.9.0 (2026-05-27)
+
+### Bug Fixes
+
+- **cli**: Correct PostgreSQL storage class import path in flower templates
+  ([`7da6890`](https://github.com/gadz82/orchid-cli/commit/7da68906905e024ea8fcc8fc2c11b522e22f1fcc))
+
+### Features
+
+- **cli**: Add supervisor configuration support with memory and streaming options
+  ([`8e7352a`](https://github.com/gadz82/orchid-cli/commit/8e7352a3d72b5dfa01f65ca9adea11e858cff099))
+
+### Refactoring
+
+- **cli**: Remove ChromaDB backend, replace with orchid-rag-chroma plugin
+  ([`45ec2bd`](https://github.com/gadz82/orchid-cli/commit/45ec2bdee6c0e15d28d5c115a8e2da1849656941))
+
+- **tests**: Replace _REGISTRY with TOOL_REGISTRY and improve test isolation
+  ([`7c9ee5c`](https://github.com/gadz82/orchid-cli/commit/7c9ee5c63f4432ce94ab8b52b774c5c1d2bbb7aa))
+
+### Testing
+
+- Remove ChromaDB metadata filter tests
+  ([`808f818`](https://github.com/gadz82/orchid-cli/commit/808f81809931a581e463623f058843f05c6c7c63))
+
+- Remove ChromaRepository and Chroma scope filter tests
+  ([`d016191`](https://github.com/gadz82/orchid-cli/commit/d016191e68b305b04ec0c4c9b4fdbfc7fade6058))
+
+
 ## v1.8.0 (2026-05-22)
 
 ### Bug Fixes
