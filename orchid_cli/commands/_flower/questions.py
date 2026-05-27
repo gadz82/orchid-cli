@@ -91,6 +91,17 @@ def _skip_if_no_startup_hook(answers: dict[str, Any]) -> bool:
     return answers.get("infrastructure.startup_hook_path", "") == ""
 
 
+def _summary_enabled(answers: dict[str, Any]) -> bool:
+    sup = answers.get("supervisor", {})
+    return sup.get("history_summary_enabled", False) is True
+
+
+def _memory_strategy_enabled(answers: dict[str, Any]) -> bool:
+    sup = answers.get("supervisor", {})
+    memory = sup.get("memory", {})
+    return memory.get("strategy", "none") != "none"
+
+
 PHASE_0_IDENTITY = Phase(
     name="Project Identity",
     questions=[
@@ -282,6 +293,13 @@ PHASE_2_SUPERVISOR = Phase(
             help_text="Use a cheaper/faster model for routing if desired",
         ),
         Question(
+            key="supervisor.fallback_model",
+            prompt="Fallback LLM model for supervisor (leave empty to use default)",
+            type=QuestionType.TEXT,
+            default="",
+            help_text="Used when the primary model fails",
+        ),
+        Question(
             key="supervisor.history_max_turns",
             prompt="Max conversation history turns for supervisor",
             type=QuestionType.NUMBER,
@@ -297,21 +315,65 @@ PHASE_2_SUPERVISOR = Phase(
             key="supervisor.history_summary_enabled",
             prompt="Enable sliding-window summarization for long histories?",
             type=QuestionType.BOOL,
-            default=False,
+            default=True,
         ),
         Question(
             key="supervisor.history_summary_recent_turns",
             prompt="Number of recent turns to keep verbatim (when summarization enabled)",
             type=QuestionType.NUMBER,
             default=10,
-            condition=lambda a: a.get("supervisor.history_summary_enabled", False) is True,
+            condition=_summary_enabled,
         ),
         Question(
             key="supervisor.history_summary_model",
             prompt="Summarization model (leave empty to use default)",
             type=QuestionType.TEXT,
             default="",
-            condition=lambda a: a.get("supervisor.history_summary_enabled", False) is True,
+            help_text="Leave empty to reuse the supervisor model",
+            condition=_summary_enabled,
+        ),
+        # ── Conversation memory strategy ──
+        Question(
+            key="supervisor.memory.strategy",
+            prompt="Conversation memory strategy",
+            type=QuestionType.SELECT,
+            choices=["none", "running_summary", "rag_augmented"],
+            default="none",
+            help_text="none: no cross-session memory; running_summary: incremental summarization; rag_augmented: vector-backed memory retrieval",
+        ),
+        Question(
+            key="supervisor.memory.summary_recent_turns",
+            prompt="Recent turns to keep verbatim in memory summaries",
+            type=QuestionType.NUMBER,
+            default=10,
+            condition=_memory_strategy_enabled,
+        ),
+        Question(
+            key="supervisor.memory.truncation_strategy",
+            prompt="Truncation strategy for long messages",
+            type=QuestionType.SELECT,
+            choices=["hard", "middle", "llm", "semantic"],
+            default="hard",
+            help_text="hard: cut at limit (fast); middle: keep start+end; llm: LLM-compress (costly); semantic: RAG-based",
+        ),
+        Question(
+            key="supervisor.memory.truncation_max_chars",
+            prompt="Max characters per message before truncation",
+            type=QuestionType.NUMBER,
+            default=1000,
+        ),
+        Question(
+            key="supervisor.streaming_enabled",
+            prompt="Enable SSE streaming for responses?",
+            type=QuestionType.BOOL,
+            default=True,
+        ),
+        Question(
+            key="supervisor.skip_synthesis_when_single_agent",
+            prompt="Skip supervisor synthesis when only one agent responds?",
+            type=QuestionType.BOOL,
+            default=True,
+            help_text="Saves LLM cost when a single agent generates the full response",
         ),
     ],
 )

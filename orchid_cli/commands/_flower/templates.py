@@ -45,6 +45,7 @@ defaults:
   rag:
     enabled: {defaults_rag_enabled}
 
+{supervisor_section}
 {guardrails_section}
 {tools_section}
 {skills_section}
@@ -217,7 +218,7 @@ def _build_orchid_yml(answers: dict) -> str:
     if storage_backend == "custom":
         storage_class = answers.get("infrastructure.storage_class", "")
     elif storage_backend == "postgresql":
-        storage_class = "orchid_ai.persistence.postgres.OrchidPostgresChatStorage"
+        storage_class = "orchid_storage_postgres.OrchidPostgresChatStorage"
     else:
         storage_class = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
 
@@ -246,6 +247,49 @@ def _build_orchid_yml(answers: dict) -> str:
         checkpointer=checkpointer,
         langsmith_tracing=langsmith,
     )
+
+
+def _build_supervisor_section(answers: dict) -> str:
+    sup = answers.get("supervisor", {})
+    if not sup:
+        return "# No supervisor overrides\n"
+
+    lines = ["supervisor:"]
+
+    for field in ("assistant_name", "routing_model", "fallback_model"):
+        val = sup.get(field)
+        if val:
+            lines.append(f'  {field}: "{val}"')
+
+    for field in ("history_max_turns", "history_max_chars", "history_summary_recent_turns"):
+        val = sup.get(field)
+        if val is not None:
+            lines.append(f"  {field}: {val}")
+
+    for field in ("history_summary_enabled", "streaming_enabled", "skip_synthesis_when_single_agent"):
+        val = sup.get(field)
+        if val is not None:
+            lines.append(f"  {field}: {'true' if val else 'false'}")
+
+    summary_model = sup.get("history_summary_model")
+    if summary_model:
+        lines.append(f'  history_summary_model: "{summary_model}"')
+
+    memory = sup.get("memory", {})
+    if memory:
+        lines.append("  memory:")
+        strategy = memory.get("strategy", "none")
+        lines.append(f'    strategy: "{strategy}"')
+        srt = memory.get("summary_recent_turns")
+        if srt is not None:
+            lines.append(f"    summary_recent_turns: {srt}")
+        ts = memory.get("truncation_strategy", "hard")
+        lines.append(f'    truncation_strategy: "{ts}"')
+        tmc = memory.get("truncation_max_chars")
+        if tmc is not None:
+            lines.append(f"    truncation_max_chars: {tmc}")
+
+    return "\n".join(lines) + "\n"
 
 
 def _build_agents_yaml(answers: dict) -> str:
@@ -406,10 +450,15 @@ def _build_agents_yaml(answers: dict) -> str:
     if mcp_gateway.get("configure", False):
         mcp_gateway_section = "mcp_gateway:\n  tools: {}\n"
 
+    supervisor_section = _build_supervisor_section(answers)
+
     return AGENTS_YAML_TEMPLATE.format(
         defaults_llm_model=defaults_model,
         defaults_llm_temperature=0.2,
         defaults_rag_enabled=defaults_rag,
+        supervisor_section=supervisor_section
+        if supervisor_section != "# No supervisor overrides\n"
+        else "# No supervisor overrides\n",
         guardrails_section=guardrails_section if guardrails_section else "# No global guardrails configured\n",
         tools_section=tools_section if tools_section else "# No global tools configured\n",
         skills_section=skills_section if skills_section else "# No cross-agent skills configured\n",

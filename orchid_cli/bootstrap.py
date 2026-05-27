@@ -20,12 +20,6 @@ from pathlib import Path
 from orchid_ai import Orchid
 from orchid_ai.content.local import LocalFileContentSource
 
-# Register the ChromaDB vector backend so ``vector_backend="chroma"``
-# resolves through ``build_reader()``.  Import is intentionally at
-# module level so the registration happens before any ``Orchid``
-# construction.
-import orchid_cli.rag  # noqa: F401
-
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +29,9 @@ DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
 DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
 DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore"
 
-# ChromaDB defaults — zero-infrastructure RAG for the CLI.
+# ChromaDB defaults — zero-infrastructure RAG for the CLI via
+# orchid-rag-chroma plugin.  The plugin auto-registers ``"chroma"``
+# in VECTOR_BACKEND_REGISTRY via entry points.
 DEFAULT_VECTOR_BACKEND = "chroma"
 DEFAULT_CHROMA_PATH = "~/.orchid/chroma"
 

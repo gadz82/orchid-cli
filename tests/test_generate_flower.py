@@ -25,7 +25,7 @@ from orchid_cli.commands._flower.questions import (
     _skip_if_sqlite_storage,
 )
 from orchid_cli.commands._flower.scaffolding import ScaffoldGenerator
-from orchid_cli.commands._flower.templates import _build_agents_yaml, _build_orchid_yml
+from orchid_cli.commands._flower.templates import _build_agents_yaml, _build_orchid_yml, _build_supervisor_section
 from orchid_cli.commands._flower.validators import (
     validate_agent_config,
     validate_agent_name,
@@ -1249,6 +1249,63 @@ class TestTemplatesEdgeCases:
         data = yaml.safe_load(result)
         assert data is not None
         assert "mcp_gateway" in data
+
+    def test_build_supervisor_section_empty(self) -> None:
+        result = _build_supervisor_section({})
+        assert result == "# No supervisor overrides\n"
+
+    def test_build_supervisor_section_full(self) -> None:
+        answers = {
+            "supervisor": {
+                "assistant_name": "Test Assistant",
+                "routing_model": "ollama/llama3.2:1b",
+                "fallback_model": "ollama/llama3.2:1b",
+                "history_max_turns": 30,
+                "history_max_chars": 2000,
+                "history_summary_enabled": True,
+                "history_summary_recent_turns": 15,
+                "history_summary_model": "ollama/llama3.2",
+                "streaming_enabled": True,
+                "skip_synthesis_when_single_agent": False,
+                "memory": {
+                    "strategy": "running_summary",
+                    "summary_recent_turns": 5,
+                    "truncation_strategy": "llm",
+                    "truncation_max_chars": 500,
+                },
+            }
+        }
+        result = _build_supervisor_section(answers)
+        data = yaml.safe_load(result)
+        assert data["supervisor"]["assistant_name"] == "Test Assistant"
+        assert data["supervisor"]["history_summary_enabled"] is True
+        assert data["supervisor"]["memory"]["strategy"] == "running_summary"
+        assert data["supervisor"]["memory"]["truncation_strategy"] == "llm"
+
+    def test_build_agents_yaml_with_supervisor(self) -> None:
+        answers = {
+            "infrastructure.llm_model": "ollama/llama3.2",
+            "infrastructure.vector_backend": "qdrant",
+            "supervisor": {
+                "assistant_name": "Super Agent",
+                "history_summary_enabled": True,
+                "streaming_enabled": False,
+                "memory": {"strategy": "rag_augmented", "truncation_strategy": "middle"},
+            },
+            "_agents": [],
+            "_tools": [],
+            "_skills": [],
+            "_guardrails": {"input": [], "output": []},
+            "events": {"enabled": False},
+            "_mcp_gateway": {"configure": False},
+        }
+        result = _build_agents_yaml(answers)
+        data = yaml.safe_load(result)
+        assert "supervisor" in data
+        assert data["supervisor"]["assistant_name"] == "Super Agent"
+        assert data["supervisor"]["history_summary_enabled"] is True
+        assert data["supervisor"]["streaming_enabled"] is False
+        assert data["supervisor"]["memory"]["strategy"] == "rag_augmented"
 
     def test_build_agents_yaml_agent_with_mcp(self) -> None:
         answers = {
