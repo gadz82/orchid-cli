@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.1 (2026-05-29)
+
+### Bug Fixes
+
+- **cli**: Add orchid-ai extras for document parsing and event handling
+  ([`7985f59`](https://github.com/gadz82/orchid-cli/commit/7985f59bbc32f960a520e815e1d5cc893a807a81))
+
+
 ## v1.9.0 (2026-05-27)
 
 ### Bug Fixes
