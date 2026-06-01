@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.9.2 (2026-06-01)
+
+### Bug Fixes
+
+- Update orchid-ai dependency to version 1.8.6 across all modules
+  ([`1156fcb`](https://github.com/gadz82/orchid-cli/commit/1156fcb5d7eeb2b2e32b27c7373b8c5c1f5b29f4))
+
+
 ## v1.9.1 (2026-05-29)
 
 ### Bug Fixes
