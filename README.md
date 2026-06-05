@@ -425,6 +425,31 @@ checkpointer:
 
 Chat data is stored in SQLite at `~/.orchid/chats.db` by default. OAuth tokens are stored at `~/.orchid/tokens.json` with owner-only permissions (`0o600`). Both directories are created automatically on first use.
 
+### CLI-specific RAG configuration
+
+When `orchid.yml` includes a `cli_rag:` section, the CLI uses it instead of `rag:`. This lets you run Docker-based examples locally without Qdrant:
+
+```yaml
+rag:
+  vector_backend: qdrant           # used by orchid-api (Docker)
+  qdrant_url: http://qdrant:6333
+  embedding_model: gemini/gemini-embedding-001
+
+cli_rag:
+  vector_backend: chroma           # used by orchid-cli (local, on-disk)
+  embedding_model: ollama/nomic-embed-text
+```
+
+When `cli_rag:` is absent, the CLI falls back to `rag:` as usual. The `cli_rag:` section supports the same keys as `rag:`:
+
+| Key | Description |
+|-----|-------------|
+| `vector_backend` | Vector store backend (`chroma`, `qdrant`, `null`) |
+| `qdrant_url` | Qdrant server URL (only used when `vector_backend: qdrant`) |
+| `embedding_model` | Embedding model for vectorization |
+| `openai_api_key` | OpenAI API key (if using OpenAI embeddings) |
+| `gemini_api_key` | Gemini API key (if using Gemini embeddings) |
+
 ### Checkpointing
 
 The CLI supports LangGraph checkpointers for persistent graph state. This is **required** when any agent uses Human-in-the-Loop (`requires_approval: true` on tools) or relies on resume-after-interrupt flows.

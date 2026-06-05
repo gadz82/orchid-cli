@@ -167,8 +167,11 @@ Chat ID prefix matching is supported (type first few chars of UUID).
 | Embedding model | `text-embedding-3-small` | `EMBEDDING_MODEL` |
 | Storage class | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
+| cli_rag override | When `cli_rag:` exists in YAML, it replaces `rag:` for CLI only | — |
 
 The CLI defaults to **ChromaDB** (local, on-disk) for zero-infrastructure RAG. Set `VECTOR_BACKEND=qdrant` to use Qdrant instead (e.g. when hybrid sparse+dense search is required).
+
+When `orchid.yml` includes a `cli_rag:` section, the CLI uses those values instead of `rag:`. This allows Docker-based examples (with `rag.vector_backend: qdrant`) to run locally via the CLI without requiring Qdrant infrastructure.
 
 ## OAuth Configuration
 

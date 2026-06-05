@@ -17,6 +17,8 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import yaml
+
 from orchid_ai import Orchid
 from orchid_ai.content.local import LocalFileContentSource
 
@@ -36,9 +38,30 @@ DEFAULT_VECTOR_BACKEND = "chroma"
 DEFAULT_CHROMA_PATH = "~/.orchid/chroma"
 
 
+def _has_cli_rag_section(config_path: str) -> bool:
+    """Return True if the YAML config has a ``cli_rag:`` section.
+
+    When ``cli_rag:`` is present, the CLI uses it instead of ``rag:``
+    for vector backend and embedding configuration.  This allows
+    Docker-based examples (with ``rag.vector_backend: qdrant``) to
+    run locally via the CLI without requiring Qdrant infrastructure.
+    """
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return "cli_rag" in data and isinstance(data["cli_rag"], dict)
+    except (FileNotFoundError, yaml.YAMLError):
+        return False
+
+
 def apply_cli_config(config_path: str) -> None:
     """Apply ``orchid.yml`` values to env vars, honouring the CLI's
     ``skip_sections={"storage"}`` convention.
+
+    When a ``cli_rag:`` section is present in the YAML, the ``rag:``
+    section is skipped so that CLI-specific RAG settings (typically
+    ChromaDB + local embeddings) win over the API's RAG settings
+    (typically Qdrant + cloud embeddings).
 
     Silently skips ``.md`` files — Markdown config applies its own
     env-var mapping through :class:`orchid_ai.Orchid`.
@@ -55,7 +78,12 @@ def apply_cli_config(config_path: str) -> None:
 
     from orchid_ai.config.yaml_env import apply_yaml_to_env
 
-    apply_yaml_to_env(config_path, skip_sections={"storage"})
+    skip = {"storage"}
+    if _has_cli_rag_section(config_path):
+        skip.add("rag")
+        logger.info("[CLI] cli_rag: section detected — using CLI-specific RAG config")
+
+    apply_yaml_to_env(config_path, skip_sections=skip)
 
 
 async def bootstrap(
@@ -108,16 +136,22 @@ async def bootstrap(
 
     # CLI convention: storage block in YAML does NOT override our SQLite
     # default.  Everything else in YAML → env propagates as usual.
+    # When cli_rag: is present, rag: is also skipped so CLI-specific
+    # RAG settings (chroma + local embeddings) win over API settings.
 
     # Build content sources from --content-path CLI args
     content_sources = None
     if content_paths:
         content_sources = [LocalFileContentSource(path=str(Path(p).resolve())) for p in content_paths]
 
+    skip_sections = {"storage"}
+    if _has_cli_rag_section(config_path):
+        skip_sections.add("rag")
+
     orchid = await Orchid.from_config_path(
         config_path=config_path,
         apply_yaml=bool(config_path),
-        skip_yaml_sections={"storage"},
+        skip_yaml_sections=skip_sections,
         model=model,
         vector_backend=resolved_backend,
         qdrant_url=qdrant_url,

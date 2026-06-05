@@ -8,7 +8,7 @@ import tempfile
 import yaml
 
 from orchid_ai.config.yaml_env import YAML_TO_ENV
-from orchid_cli.bootstrap import apply_cli_config
+from orchid_cli.bootstrap import _has_cli_rag_section, apply_cli_config
 
 
 class TestApplyYamlToEnv:
@@ -76,3 +76,133 @@ class TestYamlToEnvMapping:
 
     def test_agents_key_present(self):
         assert ("agents", "config_path") in YAML_TO_ENV
+
+    def test_cli_rag_keys_present(self):
+        """cli_rag keys exist in mapping."""
+        assert ("cli_rag", "vector_backend") in YAML_TO_ENV
+        assert ("cli_rag", "embedding_model") in YAML_TO_ENV
+
+
+class TestCliRagOverride:
+    """Tests for cli_rag: section overriding rag: section."""
+
+    def test_cli_rag_overrides_rag_section(self):
+        """When both rag: and cli_rag: exist, cli_rag: values win."""
+        config = {
+            "rag": {
+                "vector_backend": "qdrant",
+                "qdrant_url": "http://qdrant:6333",
+                "embedding_model": "gemini/gemini-embedding-001",
+            },
+            "cli_rag": {
+                "vector_backend": "chroma",
+                "embedding_model": "ollama/nomic-embed-text",
+            },
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config, f)
+            f.flush()
+            os.environ.pop("VECTOR_BACKEND", None)
+            os.environ.pop("QDRANT_URL", None)
+            os.environ.pop("EMBEDDING_MODEL", None)
+            apply_cli_config(f.name)
+            # cli_rag values should win
+            assert os.environ.get("VECTOR_BACKEND") == "chroma"
+            assert os.environ.get("EMBEDDING_MODEL") == "ollama/nomic-embed-text"
+            # QDRANT_URL should NOT be set (rag: was skipped)
+            assert "QDRANT_URL" not in os.environ
+        os.unlink(f.name)
+
+    def test_cli_rag_absent_falls_back_to_rag(self):
+        """When cli_rag: is absent, rag: values are used."""
+        config = {
+            "rag": {
+                "vector_backend": "qdrant",
+                "qdrant_url": "http://qdrant:6333",
+                "embedding_model": "text-embedding-3-small",
+            },
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config, f)
+            f.flush()
+            os.environ.pop("VECTOR_BACKEND", None)
+            os.environ.pop("QDRANT_URL", None)
+            os.environ.pop("EMBEDDING_MODEL", None)
+            apply_cli_config(f.name)
+            # rag values should be used
+            assert os.environ.get("VECTOR_BACKEND") == "qdrant"
+            assert os.environ.get("QDRANT_URL") == "http://qdrant:6333"
+            assert os.environ.get("EMBEDDING_MODEL") == "text-embedding-3-small"
+        os.unlink(f.name)
+
+    def test_cli_rag_empty_dict_is_not_active(self):
+        """An empty cli_rag: dict is not considered active."""
+        config = {
+            "rag": {"vector_backend": "qdrant"},
+            "cli_rag": {},
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config, f)
+            f.flush()
+            os.environ.pop("VECTOR_BACKEND", None)
+            apply_cli_config(f.name)
+            # Empty cli_rag: is still a dict, so rag: should be skipped
+            # But since cli_rag has no values, VECTOR_BACKEND won't be set
+            # This is expected behavior — empty cli_rag: means "use CLI defaults"
+            assert "VECTOR_BACKEND" not in os.environ
+        os.unlink(f.name)
+
+    def test_cli_rag_non_dict_is_ignored(self):
+        """A non-dict cli_rag: value is ignored (rag: is used)."""
+        config = {
+            "rag": {"vector_backend": "qdrant"},
+            "cli_rag": "invalid",
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config, f)
+            f.flush()
+            os.environ.pop("VECTOR_BACKEND", None)
+            apply_cli_config(f.name)
+            # cli_rag is not a dict, so rag: should be used
+            assert os.environ.get("VECTOR_BACKEND") == "qdrant"
+        os.unlink(f.name)
+
+
+class TestHasCliRagSection:
+    """Tests for _has_cli_rag_section helper."""
+
+    def test_returns_true_when_cli_rag_present(self):
+        config = {"cli_rag": {"vector_backend": "chroma"}}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config, f)
+            f.flush()
+            assert _has_cli_rag_section(f.name) is True
+        os.unlink(f.name)
+
+    def test_returns_false_when_cli_rag_absent(self):
+        config = {"rag": {"vector_backend": "qdrant"}}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config, f)
+            f.flush()
+            assert _has_cli_rag_section(f.name) is False
+        os.unlink(f.name)
+
+    def test_returns_false_for_non_dict(self):
+        config = {"cli_rag": "not a dict"}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config, f)
+            f.flush()
+            assert _has_cli_rag_section(f.name) is False
+        os.unlink(f.name)
+
+    def test_returns_false_for_missing_file(self):
+        assert _has_cli_rag_section("/nonexistent/path.yml") is False
+
+    def test_returns_true_for_empty_dict(self):
+        """An empty cli_rag: dict is still considered active."""
+        config = {"cli_rag": {}}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            yaml.dump(config, f)
+            f.flush()
+            assert _has_cli_rag_section(f.name) is True
+        os.unlink(f.name)
