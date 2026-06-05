@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-06-05)
+
+### Bug Fixes
+
+- Update orchid-ai dependency to version 1.8.8
+  ([`a6fee91`](https://github.com/gadz82/orchid-cli/commit/a6fee91bf12607b612492f0a27dd0b46d7e7bf56))
+
+- **cli**: Streamline auth handling in chat_send and flower templates
+  ([`e6e9076`](https://github.com/gadz82/orchid-cli/commit/e6e90767c30b6b7e5307b097513284bcb167f8aa))
+
+### Features
+
+- **cli**: Add `cli_rag` support for CLI-specific RAG configuration and tests
+  ([`e5b6303`](https://github.com/gadz82/orchid-cli/commit/e5b6303a36dae5ac3b10b9a88c10df90c4e272cf))
+
+
 ## v1.9.2 (2026-06-01)
 
 ### Bug Fixes
