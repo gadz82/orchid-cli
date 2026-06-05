@@ -17,6 +17,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from rich.console import Console
 
 from orchid_ai.core.state import OrchidAuthContext
+from orchid_ai.core.run_config import with_auth
 
 from .._cancellation import CancelScope
 
@@ -46,19 +47,19 @@ async def send_message(
     if has_checkpointer:
         initial_state: dict = {
             "messages": [HumanMessage(content=message)],
-            "auth_context": auth,
             "chat_id": chat_id,
         }
     else:
         initial_state = {
             "messages": history_messages + [HumanMessage(content=message)],
-            "auth_context": auth,
             "chat_id": chat_id,
         }
     if mcp_auth_status:
         initial_state["mcp_auth_status"] = mcp_auth_status
 
-    graph_config: dict = {"configurable": {"thread_id": chat_id}}
+    # Auth is execution context — carried in the RunnableConfig, never in
+    # the (checkpointed) graph state.
+    graph_config: dict = with_auth(auth, thread_id=chat_id)
 
     if streaming:
         with CancelScope(watch_esc=True) as scope:

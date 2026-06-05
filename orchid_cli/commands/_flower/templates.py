@@ -67,13 +67,12 @@ class {class_name}(OrchidAgent):
     def __init__(self, name: str, **kwargs) -> None:
         super().__init__(name=name, **kwargs)
 
-    async def run(
-        self,
-        state: OrchidAgentState,
-        auth_context: OrchidAuthContext,
-    ) -> OrchidAgentState:
+    async def run(self, state: OrchidAgentState) -> OrchidAgentState:
+        # Auth is execution context: the graph binds it before ``run`` —
+        # read it via ``self._current_auth`` (never from graph state).
+        auth: OrchidAuthContext | None = self._current_auth
         user_query = self.extract_user_query(state)
-        context = self.fetch_rag_context(user_query, auth_context)
+        context = await self.fetch_rag_context(user_query, auth)
         state["context"] = context
         return state
 """.lstrip()
