@@ -2,7 +2,7 @@
 
 ## What This Package Is
 
-**orchid-cli** is the Typer-based command-line interface for the Orchid multi-agent AI framework. It imports `orchid` (the library) as a dependency and provides terminal access to all chat operations, config validation, RAG indexing, and Claude Code skill generation. It mirrors the full functionality of `orchid-api` but runs locally with no server, Docker, or external database required (defaults to SQLite).
+**orchid-cli** is the Typer-based command-line interface for the Orchid multi-agent AI framework. It imports `orchid` (the library) as a dependency and provides terminal access to all chat operations, config validation, RAG indexing, and MCP server authorisation. It mirrors the full functionality of `orchid-api` but runs locally with no server, Docker, or external database required (defaults to SQLite).
 
 ## Package Structure
 
@@ -28,7 +28,6 @@ orchid-cli/
       index.py       file/dir/text/json-file commands (RAG ingestion)
       mcp.py         MCP OAuth: status, revoke per-server tokens
                      (authorize flow runs through the API gateway, not the CLI)
-      skill.py       generate command (Claude Code skills from agents.yaml)
       signals.py     Pollen ops: emit / list / show
       jobs.py        Bloom ops: list triggers, list runs per trigger
       runs.py        Bloom ops: list / show / retry / cancel
@@ -98,13 +97,6 @@ orchid index file <path> -n <namespace> --config <path>     # Index a single fil
 orchid index dir  <path> -n <namespace> --config <path>     # Index a directory
 orchid index text "..."  -n <namespace> --config <path>     # Index inline text
 orchid index json-file <path> -n <namespace> --config <path>  # Bulk-index JSON entries
-
-# Skill generation (Claude Code)
-orchid skill generate <agents.yaml>            # Generate Claude Code skills
-orchid skill generate <agents.yaml> -o ./out   # Custom output directory
-orchid skill generate <agents.yaml> --include agent1,agent2  # Filter by name
-orchid skill generate <agents.yaml> --overwrite              # Overwrite existing
-orchid skill generate <agents.yaml> --zip                    # Create zip archive
 
 # Pollen + Bloom ops surface — local-only, requires events.enabled: true in YAML.
 orchid signals emit <type> [--payload JSON|@file] [--source S] [--tenant T] [--user U] [--dedupe-key K] [--identity JSON] -c <orchid.yml>

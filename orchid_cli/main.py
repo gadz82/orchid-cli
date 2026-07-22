@@ -34,7 +34,6 @@ from .commands import (
     runs,
     schedules,
     signals,
-    skill,
 )
 from .slash_commands import load_slash_command_plugins
 
@@ -53,7 +52,6 @@ app.add_typer(config.app, name="config")
 app.add_typer(generate_flower.app, name="generate-flower")
 app.add_typer(index.app, name="index")
 app.add_typer(mcp.app, name="mcp")
-app.add_typer(skill.app, name="skill")
 # Pollen + Bloom (events) ops surface — local-only, mirrors orchid-api.
 app.add_typer(signals.app, name="signals")
 app.add_typer(jobs.app, name="jobs")

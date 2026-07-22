@@ -6,7 +6,7 @@
 
 Command-line interface for the [Orchid](https://github.com/gadz82/orchid) multi-agent AI framework.
 
-Provides terminal access to all chat operations, configuration validation, RAG indexing, MCP server authorisation, and Claude Code skill generation. Mirrors the full functionality of [orchid-api](https://github.com/gadz82/orchid-api) but runs locally with no server, Docker, or external database required (defaults to SQLite).
+Provides terminal access to all chat operations, configuration validation, RAG indexing, and MCP server authorisation. Mirrors the full functionality of [orchid-api](https://github.com/gadz82/orchid-api) but runs locally with no server, Docker, or external database required (defaults to SQLite).
 
 ## Why use the CLI
 
@@ -15,7 +15,6 @@ Provides terminal access to all chat operations, configuration validation, RAG i
 - **Zero-infrastructure RAG** — defaults to ChromaDB (via `orchid-rag-chroma` plugin) for on-disk vector storage. Add Qdrant / Neo4j only when you need them.
 - **No infrastructure required** — defaults to SQLite chat storage. Add Postgres via `orchid-storage-postgres` only when you need it.
 - **Plugin extensible** — register custom subcommands via Python entry points without forking.
-- **Skill export** — turn an `agents.yaml` into a set of Claude Code skill folders so the same agents are usable from `claude` directly.
 
 ## Installation
 
@@ -59,10 +58,7 @@ done
 # 3) Pre-seed RAG with internal documentation
 orchid index dir ./docs/internal -n knowledge_base -c orchid.yml --pattern '*.md'
 
-# 4) Export agents as Claude Code skills for ad-hoc usage
-orchid skill generate orchid-examples/restaurant/config/agents.yaml -o ~/.claude/skills
-
-# 5) Drive a non-interactive chat from a shell script
+# 4) Drive a non-interactive chat from a shell script
 chat_id=$(orchid chat create -c orchid.yml -t "batch-$(date +%s)" --json | jq -r .id)
 for q in "$@"; do
     orchid chat send "$chat_id" "$q" -c orchid.yml
@@ -272,44 +268,6 @@ orchid schedules disable <schedule_id> -c orchid.yml
 | `--identity` | JSON identity claim override (rare — defaults to the CLI's `OrchidAuthContext`) | — |
 
 The CLI honours the same idempotency, visibility filtering, and audit trail that orchid-api enforces — emitting from the CLI on a Postgres-backed config is exactly the same as POSTing a webhook to `orchid-api`. Use it for: smoke-testing a new trigger before wiring an upstream producer; replaying a single signal during incident triage; bulk-emitting a small fixture set in dev.
-
-### Skill Generation (Claude Code)
-
-Generate [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) from your Orchid agent configuration. Each agent and orchestrator skill becomes a Claude Code skill directory with a `SKILL.md` file.
-
-```bash
-# Generate skills for all agents and orchestrator skills
-orchid skill generate path/to/agents.yaml
-
-# Custom output directory
-orchid skill generate path/to/agents.yaml -o .claude/skills
-
-# Generate only specific agents/skills
-orchid skill generate path/to/agents.yaml --include basketball,psychologist
-
-# Overwrite existing skill directories
-orchid skill generate path/to/agents.yaml --overwrite
-
-# Create a zip archive for upload
-orchid skill generate path/to/agents.yaml --zip
-```
-
-**What gets converted:**
-
-| Orchid Concept | Claude Code Skill |
-|---|---|
-| Agent prompt | Core SKILL.md instructions |
-| Agent description | Skill frontmatter description |
-| Built-in tools | Executable Python scripts in `scripts/` |
-| Agent skills (workflows) | Step-by-step workflow instructions with script commands |
-| Orchestrator skills | Multi-agent workflow skill |
-| MCP servers | Noted as runtime-only (not portable) |
-| RAG context | Noted as runtime-only (not portable) |
-| Guardrails (global + per-agent) | Input/output rules section with actions and config |
-
-Each agent skill includes a `scripts/` folder with standalone Python scripts that Claude Code can execute directly. Tools from the same source module are grouped into a single script file with a CLI wrapper that accepts `--arg value` arguments.
-
-The skill generator pulls parameter metadata from the YAML `tools:` block when present, and falls back to Python signature introspection when omitted.
 
 ### Project Scaffolding (generate-flower)
 
@@ -556,7 +514,6 @@ orchid_cli/
     mcp.py         Per-server MCP OAuth: status, authorize, revoke
                    (shares PKCE flow via oidc.py utility)
     index.py       On-demand RAG seeding: seed, file, dir, text, json-file
-    skill.py       Generate Claude Code skills from agents.yaml
     signals.py     Pollen — emit / list / show signals through the local dispatcher
     runs.py        Bloom — list / show / retry / cancel JobRun rows
     jobs.py        Trigger registry inspection + per-trigger runs
