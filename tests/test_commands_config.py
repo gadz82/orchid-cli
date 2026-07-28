@@ -1,4 +1,5 @@
 """Tests for orchid_cli.commands.config — YAML validation."""
+
 from __future__ import annotations
 
 import tempfile
