@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.10.2 (2026-07-29)
+
+### Bug Fixes
+
+- **cli**: Update project description
+  ([`3ac8563`](https://github.com/gadz82/orchid-cli/commit/3ac85630672fdfc4d6a7438b07e0eb6f60fc13bc))
+
+
 ## v1.10.1 (2026-07-29)
 
 ### Bug Fixes
