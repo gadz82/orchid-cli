@@ -1,7 +1,7 @@
 [project]
 name = "orchid-cli"
 version = "1.10.1"
-description = "Orchid CLI — command-line interface for the Orchestrator Index agent framework"
+description = "Orchid CLI — command-line interface for the OrchestratorIndex agent framework"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
