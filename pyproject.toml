@@ -81,6 +81,11 @@ packages = ["orchid_cli"]
 target-version = "py311"
 line-length = 120
 
+[tool.ruff.lint]
+ignore = [
+    "BLE001",   # blind except Exception — intentional at CLI auth/bootstrap/fault-isolation boundaries
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

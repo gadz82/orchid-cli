@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from rich.console import Console
-
 from orchid_ai.core.state import OrchidAuthContext
+from rich.console import Console
 
 console = Console()
 

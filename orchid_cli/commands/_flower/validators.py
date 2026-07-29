@@ -47,7 +47,7 @@ def validate_yaml_safe(value: str) -> tuple[bool, str]:
     return True, ""
 
 
-def validate_number_range(value: str, min_val: int | float, max_val: int | float) -> tuple[bool, str]:
+def validate_number_range(value: str, min_val: float, max_val: float) -> tuple[bool, str]:
     try:
         num = int(value) if "." not in value else float(value)
     except ValueError:

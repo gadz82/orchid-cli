@@ -169,7 +169,6 @@ async def _resolve_and_store_identity(cfg, token: StoredToken) -> None:
     commands are frequent.
     """
     import httpx
-
     from orchid_ai.utils import import_class
 
     resolver_cls = import_class(cfg.identity_resolver_class)

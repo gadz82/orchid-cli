@@ -36,10 +36,9 @@ import uuid as _uuid
 from typing import Any
 
 import typer
+from orchid_ai.core.events.signal import SignalEnvelope
 from rich.console import Console
 from rich.table import Table
-
-from orchid_ai.core.events.signal import SignalEnvelope
 
 from ._events_session import events_session, now_or_iso, require_events
 

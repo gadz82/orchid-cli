@@ -11,12 +11,11 @@ from __future__ import annotations
 import logging
 
 import typer
-from rich.console import Console
-from rich.table import Table
-
 from orchid_ai.config.loader import load_config
 from orchid_ai.mcp.auth_registry import OrchidMCPAuthRegistry
 from orchid_ai.persistence.mcp_token_factory import build_mcp_token_store
+from rich.console import Console
+from rich.table import Table
 
 from .._typer_async import async_command
 from ..auth.middleware import get_auth_context

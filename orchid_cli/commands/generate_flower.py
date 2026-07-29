@@ -29,8 +29,8 @@ def generate_flower(
     Guides you through infrastructure, agents, tools, skills, and more,
     then generates orchid.yml, agents.yaml, and Python scaffold files.
     """
-    from ._flower.scaffolding import ScaffoldGenerator
     from ._flower.output import create_zip, display_file_tree, print_success_summary, write_to_directory
+    from ._flower.scaffolding import ScaffoldGenerator
     from ._flower.wizard import Wizard
 
     wizard = Wizard(console=console)

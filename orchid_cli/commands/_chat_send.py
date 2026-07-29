@@ -14,10 +14,9 @@ command shapes. Three async functions live here:
 from __future__ import annotations
 
 from langchain_core.messages import AIMessage, HumanMessage
-from rich.console import Console
-
-from orchid_ai.core.state import OrchidAuthContext
 from orchid_ai.core.run_config import with_auth
+from orchid_ai.core.state import OrchidAuthContext
+from rich.console import Console
 
 from .._cancellation import CancelScope
 

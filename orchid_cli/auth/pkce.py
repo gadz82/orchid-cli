@@ -33,10 +33,10 @@ import secrets
 import shlex
 import socket
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
-from typing import Callable
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
@@ -114,7 +114,7 @@ def _build_callback_handler(
     """
 
     class _Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 — required by BaseHTTPRequestHandler
+        def do_GET(self) -> None:
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
 

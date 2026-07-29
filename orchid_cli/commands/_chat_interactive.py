@@ -186,7 +186,7 @@ async def run_repl(
 
             # Send message (streaming in interactive mode for real-time output).
             console.print("\n[bold green]Assistant:[/bold green]")
-            response_text, agents_used = await send_message(ctx, current_chat_id, stripped, auth, streaming=True)
+            _response_text, agents_used = await send_message(ctx, current_chat_id, stripped, auth, streaming=True)
             if agents_used:
                 console.print(f"  [dim]Agents: {', '.join(agents_used)}[/dim]")
             console.print()

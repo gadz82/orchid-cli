@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 import httpx
-
 from orchid_ai.core.state import OrchidAuthContext
 
 from .config import OAuthProviderConfig, discover_oidc_endpoints, load_oauth_config

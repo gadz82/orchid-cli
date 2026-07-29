@@ -31,13 +31,12 @@ import logging
 from pathlib import Path
 
 import typer
-from rich.console import Console
-
 from orchid_ai.core.repository import Document, OrchidVectorWriter
 from orchid_ai.documents.chunker import ChunkConfig
 from orchid_ai.documents.pipeline import ingest_document
 from orchid_ai.documents.strategies import RecursiveIngestion
 from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope
+from rich.console import Console
 
 from .._typer_async import async_command
 

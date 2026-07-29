@@ -14,7 +14,7 @@ import sys
 import termios
 import tty
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Self
 
 
 @dataclass
@@ -36,7 +36,7 @@ class CancelScope:
     _original_tty: Any = field(default=None, init=False)
     _fd: int | None = field(default=None, init=False)
 
-    def __enter__(self) -> CancelScope:
+    def __enter__(self) -> Self:
         self._original_handler = signal.signal(signal.SIGINT, self._handler)
         if self.watch_esc and sys.stdin.isatty():
             self._fd = sys.stdin.fileno()
@@ -44,7 +44,7 @@ class CancelScope:
             tty.setcbreak(self._fd)
         return self
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(self, *args: object) -> None:
         signal.signal(signal.SIGINT, self._original_handler)
         if self._original_tty is not None:
             termios.tcsetattr(self._fd, termios.TCSADRAIN, self._original_tty)

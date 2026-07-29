@@ -18,10 +18,9 @@ import re
 import uuid as _uuid
 
 import typer
+from orchid_ai.core.events.job import JobStatus
 from rich.console import Console
 from rich.table import Table
-
-from orchid_ai.core.events.job import JobStatus
 
 from ._events_session import events_session, now_or_iso, require_events
 

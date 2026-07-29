@@ -187,12 +187,11 @@ class Wizard:
                     self.console.print(f"  [red]{error}[/red]")
                     continue
 
-            if question.type == QuestionType.TEXT:
-                if question.key and "agent_name" in question.key:
-                    valid, error = validate_agent_name(raw)
-                    if not valid:
-                        self.console.print(f"  [red]{error}[/red]")
-                        continue
+            if question.type == QuestionType.TEXT and question.key and "agent_name" in question.key:
+                valid, error = validate_agent_name(raw)
+                if not valid:
+                    self.console.print(f"  [red]{error}[/red]")
+                    continue
 
             return raw
 
