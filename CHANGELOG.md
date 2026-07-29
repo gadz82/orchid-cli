@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v1.10.1 (2026-07-29)
+
+### Bug Fixes
+
+- Refine imports, type annotations, and exception handling
+  ([`cf4b4fe`](https://github.com/gadz82/orchid-cli/commit/cf4b4fe0d44e15e825a7083cf67fa02720d417c6))
+
+- Remove unused skill generation
+  ([`f36cfec`](https://github.com/gadz82/orchid-cli/commit/f36cfecdb50b70a7f274565057c0aa330993584d))
+
+- Simplify imports and add missing blank lines in tests
+  ([`432ae86`](https://github.com/gadz82/orchid-cli/commit/432ae86fa888cdb875a58b0dc6197e27026f9a22))
+
+- Update orchid-ai dependency to version 1.8.10
+  ([`c102d0f`](https://github.com/gadz82/orchid-cli/commit/c102d0f5f4954d3e7dbb7db94ab33a1bd87ee442))
+
+- Update orchid-ai dependency to version 1.8.10
+  ([`8538b5b`](https://github.com/gadz82/orchid-cli/commit/8538b5bcfd9d1385a59b04a2062cab6ee251de27))
+
+- **cli**: Bump orchid-cli version to 1.10.1 for patch release
+  ([`eae9e26`](https://github.com/gadz82/orchid-cli/commit/eae9e2613b4fdb976154feb450ed6f09c85bf057))
+
+- **cli**: Update project description
+  ([`700f4d3`](https://github.com/gadz82/orchid-cli/commit/700f4d3aaa339e9a52349b2419204be15769e3a3))
+
+
 ## v1.10.0 (2026-06-05)
 
 ### Bug Fixes
