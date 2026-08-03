@@ -1,6 +1,6 @@
 [project]
 name = "orchid-cli"
-version = "1.10.2"
+version = "1.11.0"
 description = "Orchid CLI — command-line interface for the OrchestratorIndex agent framework"
 readme = "README.md"
 license = "MIT"

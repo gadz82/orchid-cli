@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-08-03)
+
+### Features
+
+- **cli**: Add `external-agents` command to manage CLI delegation tools
+  ([`d8dcc0e`](https://github.com/gadz82/orchid-cli/commit/d8dcc0e347ea5db0d0cc22660614425e0d78f0e7))
+
+
 ## v1.10.2 (2026-07-29)
 
 ### Bug Fixes
