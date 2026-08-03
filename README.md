@@ -169,6 +169,38 @@ orchid mcp revoke <server-name> -c orchid.yml
 
 Authorization itself runs through the API gateway's OAuth callback — the CLI's job is only to surface status and let the user revoke a stored token.
 
+### External AI-Agent CLI Delegation
+
+Let an Orchid agent delegate sub-tasks to external AI CLIs installed on your machine. Configured via the `external_agents:` block in `agents.yaml`:
+
+```yaml
+external_agents:
+  ask_assistant:
+    command: ["python", "-c"]
+    args: ["print('delegated response')"]
+    timeout: 30
+    description: "Delegate a sub-task to an external AI CLI."
+    requires_approval: true
+```
+
+```bash
+# List configured external-agent tools
+orchid external-agents list agents.yaml
+
+# Agents reference them by name in their `tools:` list
+# tools:
+#   - ask_assistant
+```
+
+**Security model:**
+
+- **Approval gate** — every delegation pauses for operator confirmation (HITL). `requires_approval` defaults to `true`.
+- **No shell** — the command runs as an argv list (`subprocess_exec`, never `shell=True`).
+- **Operator-controlled** — the executable path, flags, timeout, and working directory come from trusted YAML, not the LLM.
+- **Timeout** — runaway processes are killed after the configured timeout (default 600 s / 10 min).
+
+Swap in any AI CLI (path or absolute binary) by changing the `command:` field. The LLM only controls the `prompt` argument — it can never inject flags or change the executable.
+
 ### RAG Indexing
 
 Index documents into the vector store, **on startup or any time later**:
@@ -511,6 +543,7 @@ orchid_cli/
     chat.py        Full CRUD + messaging + interactive mode (slash-command
                    dispatch table)
     config.py      Validate agents.yaml
+    external_agents.py  List configured external-agent CLI tools
     mcp.py         Per-server MCP OAuth: status, authorize, revoke
                    (shares PKCE flow via oidc.py utility)
     index.py       On-demand RAG seeding: seed, file, dir, text, json-file

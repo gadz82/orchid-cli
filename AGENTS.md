@@ -25,6 +25,7 @@ orchid-cli/
       auth.py        login, logout, status subcommands
       chat.py        Full CRUD: create, list, delete, history, send, interactive, rename, share
       config.py      validate command (checks agents.yaml)
+      external_agents.py  list configured external-agent CLI tools
       index.py       file/dir/text/json-file commands (RAG ingestion)
       mcp.py         MCP OAuth: status, revoke per-server tokens
                      (authorize flow runs through the API gateway, not the CLI)
@@ -66,6 +67,8 @@ orchid-cli/
 8. **Token storage at `~/.orchid/tokens.json`.** Permissions set to `0o600` (owner-only). Tokens are keyed by `client_id`, supporting multiple providers. Refresh tokens are used automatically when the access token expires.
 
 9. **Commands go through `commands/_session.py:resolve_session`.** Every command that needs both an `Orchid` instance and a per-user `OrchidAuthContext` calls `resolve_session(config_path)` (or its `session_context` async-context-manager wrapper), which bootstraps the framework, resolves auth, and warms `passthrough` / `oauth` MCP capability caches once per `(tenant_key, user_id)`. The interactive REPL stays alive across many turns; the warmer's idempotency check makes subsequent loop iterations a no-op. Failures in the per-user warm are logged and ignored — the chat still works, it just pays the lazy discovery cost on first tool call. `bootstrap()` itself warms `auth.mode: none` servers up front (no user identity needed).
+
+10. **`external_agents:` in agents.yaml** — the `agents.yaml` file may include an ``external_agents:`` block declaring external CLI delegation tools. These are registered into ``TOOL_REGISTRY`` at graph build and referenced by name in ``agent.tools:`` like any built-in tool. The ``orchid external-agents list`` command displays them; the chat commands surface ``requires_approval`` HITL prompts before every delegation.
 
 ## Commands
 

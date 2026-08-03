@@ -28,6 +28,7 @@ from .commands import (
     auth,
     chat,
     config,
+    external_agents,
     generate_flower,
     index,
     jobs,
@@ -50,6 +51,7 @@ app = typer.Typer(
 app.add_typer(auth.app, name="auth")
 app.add_typer(chat.app, name="chat")
 app.add_typer(config.app, name="config")
+app.add_typer(external_agents.app, name="external-agents")
 app.add_typer(generate_flower.app, name="generate-flower")
 app.add_typer(index.app, name="index")
 app.add_typer(mcp.app, name="mcp")
