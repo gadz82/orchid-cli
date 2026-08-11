@@ -21,6 +21,19 @@ Scope options shared by all commands:
                      cross-tenant seed data.
     --scope / -s     Scope level: tenant | shared | user (default: "tenant").
     --user           User ID for user-scoped docs (requires --scope user).
+
+Markdown / front-matter options (``file`` and ``dir``):
+    --front-matter         Parse YAML front-matter from Markdown files.
+    --id-field <name>      Front-matter field to use as a stable source id.
+
+Idempotency options (``file`` and ``dir``):
+    --manifest/--no-manifest     Enable the ingestion manifest (default: on for
+                                 ``dir``, off for ``file``).
+    --manifest-dsn <dsn>         SQLite path or ``postgresql://...`` DSN.
+    --manifest-path <path>       Alias for a SQLite manifest file path.
+    --prune                      Delete vectors for removed source files
+                                 (``dir`` only).
+    --force                      Re-index even if the manifest says unchanged.
 """
 
 from __future__ import annotations
@@ -28,13 +41,16 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
+from typing import Any
 
 import typer
-from orchid_ai.core.repository import Document, OrchidVectorWriter
+from orchid_ai.core.ingestion_manifest import OrchidIngestionManifest
+from orchid_ai.core.repository import Document, OrchidDocument, OrchidVectorWriter
 from orchid_ai.documents.chunker import ChunkConfig
 from orchid_ai.documents.pipeline import ingest_document
-from orchid_ai.documents.strategies import RecursiveIngestion
+from orchid_ai.documents.strategies import FrontMatterIngestion, RecursiveIngestion
 from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope
 from rich.console import Console
 
@@ -46,9 +62,65 @@ app = typer.Typer(help="Vector store indexing (on-demand RAG seeding)", no_args_
 console = Console()
 
 
-# ── Default supported extensions for directory indexing ────────
+# ── Defaults ───────────────────────────────────────────────────
 
 _SUPPORTED_EXTS = {".pdf", ".docx", ".xlsx", ".csv", ".txt", ".md", ".png", ".jpg", ".jpeg"}
+DEFAULT_MANIFEST_DSN = os.path.expanduser("~/.orchid/index_manifest.db")
+
+
+# ── Manifest factory ───────────────────────────────────────────
+
+
+def _build_manifest(*, manifest_dsn: str, manifest_path: str) -> OrchidIngestionManifest:
+    """Create a manifest store from CLI flags.
+
+    ``--manifest-dsn`` takes precedence.  If it starts with ``postgresql://``,
+    the PostgreSQL backend is used; otherwise SQLite.  ``--manifest-path`` is
+    a convenience alias for a SQLite file path.
+    """
+    dsn = manifest_dsn or manifest_path or DEFAULT_MANIFEST_DSN
+    if dsn.startswith("postgresql://"):
+        from orchid_storage_postgres.ingestion_manifest import OrchidPostgresIngestionManifest
+
+        return OrchidPostgresIngestionManifest(dsn=dsn)
+
+    from orchid_ai.persistence.sqlite_ingestion_manifest import OrchidSQLiteIngestionManifest
+
+    return OrchidSQLiteIngestionManifest(dsn=dsn)
+
+
+async def _manifest_context(
+    *,
+    enabled: bool,
+    manifest_dsn: str,
+    manifest_path: str,
+) -> OrchidIngestionManifest | None:
+    """Initialise and return a manifest store, or ``None`` if disabled."""
+    if not enabled:
+        return None
+    manifest = _build_manifest(manifest_dsn=manifest_dsn, manifest_path=manifest_path)
+    await manifest.init_db()
+    return manifest
+
+
+def _build_ingestion(
+    *,
+    file_path: Path,
+    front_matter: bool,
+    id_field: str,
+    chunk_size: int,
+    chunk_overlap: int,
+) -> Any:
+    """Choose the ingestion strategy based on CLI flags and file type."""
+    chunk_config = ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    if front_matter and file_path.suffix.lower() == ".md":
+        return FrontMatterIngestion(inner=RecursiveIngestion(chunk_config), id_field=id_field)
+    return RecursiveIngestion(chunk_config)
+
+
+def _compute_hash(content: bytes) -> str:
+    """SHA-256 hex digest of file contents."""
+    return hashlib.sha256(content).hexdigest()
 
 
 # ── Shared helpers ──────────────────────────────────────────────
@@ -110,6 +182,12 @@ async def file(
     vision_model: str = typer.Option("", "--vision-model", help="Vision LLM for image parsing"),
     chunk_size: int = typer.Option(1000, "--chunk-size", help="Characters per chunk"),
     chunk_overlap: int = typer.Option(200, "--chunk-overlap", help="Overlap between chunks"),
+    front_matter: bool = typer.Option(False, "--front-matter", help="Parse YAML front-matter from Markdown files"),
+    id_field: str = typer.Option("", "--id-field", help="Front-matter field to use as stable source id"),
+    manifest: bool = typer.Option(False, "--manifest/--no-manifest", help="Enable idempotency manifest"),
+    manifest_dsn: str = typer.Option("", "--manifest-dsn", help="Manifest DB DSN (SQLite path or postgresql://...)"),
+    manifest_path: str = typer.Option("", "--manifest-path", help="Alias for SQLite manifest file path"),
+    force: bool = typer.Option(False, "--force", help="Re-index even if the manifest says unchanged"),
 ) -> None:
     """Index a single document file into a namespace.
 
@@ -117,7 +195,23 @@ async def file(
     Uses the same ingestion pipeline as the ``/upload`` endpoint
     (parse → chunk → embed → store).
     """
-    await _index_file(path, namespace, config, tenant, scope, user, vision_model, chunk_size, chunk_overlap)
+    await _index_file(
+        path,
+        namespace,
+        config,
+        tenant,
+        scope,
+        user,
+        vision_model,
+        chunk_size,
+        chunk_overlap,
+        front_matter=front_matter,
+        id_field=id_field,
+        manifest=manifest,
+        manifest_dsn=manifest_dsn,
+        manifest_path=manifest_path,
+        force=force,
+    )
 
 
 async def _index_file(
@@ -130,6 +224,13 @@ async def _index_file(
     vision_model: str,
     chunk_size: int,
     chunk_overlap: int,
+    *,
+    front_matter: bool,
+    id_field: str,
+    manifest: bool,
+    manifest_dsn: str,
+    manifest_path: str,
+    force: bool,
 ) -> None:
     from ..bootstrap import cli_context
 
@@ -140,31 +241,60 @@ async def _index_file(
 
     tenant_id, scope_label = _resolve_scope(tenant, scope, user)
 
-    async with cli_context(config_path) as ctx:
-        writer = await _require_writer(ctx)
-        scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
-        ingestion = RecursiveIngestion(ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap))
-
-        console.print(f"[dim]Reading {file_path}...[/dim]")
-        file_bytes = file_path.read_bytes()
-
-        count = await ingest_document(
-            file_bytes=file_bytes,
-            filename=file_path.name,
-            scope=scope_obj,
-            namespace=namespace,
-            writer=writer,
-            ingestion=ingestion,
-            vision_model=vision_model,
+    manifest_store: OrchidIngestionManifest | None = None
+    try:
+        manifest_store = await _manifest_context(
+            enabled=manifest,
+            manifest_dsn=manifest_dsn,
+            manifest_path=manifest_path,
         )
 
-        if count == 0:
-            console.print(f"[yellow]Indexed 0 chunks[/yellow] from {file_path.name} (empty or parse failed)")
-        else:
-            console.print(
-                f"[green]Indexed[/green] {count} chunk(s) from [bold]{file_path.name}[/bold] "
-                f"into namespace '{namespace}' (tenant={tenant_id}, scope={scope_label})"
+        async with cli_context(config_path) as ctx:
+            writer = await _require_writer(ctx)
+            scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
+            ingestion = _build_ingestion(
+                file_path=file_path,
+                front_matter=front_matter,
+                id_field=id_field,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
             )
+
+            source_id = file_path.name
+            file_bytes = file_path.read_bytes()
+            content_hash = _compute_hash(file_bytes)
+
+            if manifest_store and await manifest_store.should_skip(source_id, content_hash, namespace) and not force:
+                console.print(f"[dim]Skipping unchanged file:[/dim] {file_path.name}")
+                return
+
+            console.print(f"[dim]Reading {file_path}...[/dim]")
+            documents_out: list[OrchidDocument] = []
+            count = await ingest_document(
+                file_bytes=file_bytes,
+                filename=file_path.name,
+                scope=scope_obj,
+                namespace=namespace,
+                writer=writer,
+                ingestion=ingestion,
+                vision_model=vision_model,
+                documents_out=documents_out,
+            )
+
+            if count == 0:
+                console.print(f"[yellow]Indexed 0 chunks[/yellow] from {file_path.name} (empty or parse failed)")
+            else:
+                console.print(
+                    f"[green]Indexed[/green] {count} chunk(s) from [bold]{file_path.name}[/bold] "
+                    f"into namespace '{namespace}' (tenant={tenant_id}, scope={scope_label})"
+                )
+
+            if manifest_store:
+                document_ids = [doc.id for doc in documents_out]
+                await manifest_store.record(source_id, content_hash, namespace, document_ids)
+    finally:
+        if manifest_store:
+            await manifest_store.close()
 
 
 # ── Command: dir ────────────────────────────────────────────────
@@ -183,6 +313,13 @@ async def dir(
     chunk_size: int = typer.Option(1000, "--chunk-size", help="Characters per chunk"),
     chunk_overlap: int = typer.Option(200, "--chunk-overlap", help="Overlap between chunks"),
     pattern: str = typer.Option("", "--pattern", help="Glob pattern (e.g. '*.md'). Default: all supported extensions."),
+    front_matter: bool = typer.Option(False, "--front-matter", help="Parse YAML front-matter from Markdown files"),
+    id_field: str = typer.Option("", "--id-field", help="Front-matter field to use as stable source id"),
+    manifest: bool = typer.Option(True, "--manifest/--no-manifest", help="Enable idempotency manifest"),
+    manifest_dsn: str = typer.Option("", "--manifest-dsn", help="Manifest DB DSN (SQLite path or postgresql://...)"),
+    manifest_path: str = typer.Option("", "--manifest-path", help="Alias for SQLite manifest file path"),
+    prune: bool = typer.Option(False, "--prune", help="Delete vectors for source files no longer present"),
+    force: bool = typer.Option(False, "--force", help="Re-index even if the manifest says unchanged"),
 ) -> None:
     """Recursively index all supported files in a directory."""
     await _index_dir(
@@ -196,6 +333,13 @@ async def dir(
         chunk_size,
         chunk_overlap,
         pattern,
+        front_matter=front_matter,
+        id_field=id_field,
+        manifest=manifest,
+        manifest_dsn=manifest_dsn,
+        manifest_path=manifest_path,
+        prune=prune,
+        force=force,
     )
 
 
@@ -210,6 +354,14 @@ async def _index_dir(
     chunk_size: int,
     chunk_overlap: int,
     pattern: str,
+    *,
+    front_matter: bool,
+    id_field: str,
+    manifest: bool,
+    manifest_dsn: str,
+    manifest_path: str,
+    prune: bool,
+    force: bool,
 ) -> None:
     from ..bootstrap import cli_context
 
@@ -230,41 +382,111 @@ async def _index_dir(
     console.print(f"[dim]Found {len(files)} file(s) to index.[/dim]")
     tenant_id, scope_label = _resolve_scope(tenant, scope, user)
 
-    async with cli_context(config_path) as ctx:
-        writer = await _require_writer(ctx)
-        scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
-        ingestion = RecursiveIngestion(ChunkConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap))
-
-        total_chunks = 0
-        successes = 0
-        failures = 0
-
-        for f in files:
-            try:
-                file_bytes = f.read_bytes()
-                count = await ingest_document(
-                    file_bytes=file_bytes,
-                    filename=f.name,
-                    scope=scope_obj,
-                    namespace=namespace,
-                    writer=writer,
-                    ingestion=ingestion,
-                    vision_model=vision_model,
-                )
-                if count > 0:
-                    successes += 1
-                    total_chunks += count
-                    console.print(f"  [green]{count} chunks[/green]  {f.relative_to(dir_path)}")
-                else:
-                    console.print(f"  [yellow]0 chunks[/yellow]  {f.relative_to(dir_path)} (empty/unparseable)")
-            except Exception as exc:
-                failures += 1
-                console.print(f"  [red]failed[/red]  {f.relative_to(dir_path)}: {exc}")
-
-        console.print(
-            f"\n[green]Done.[/green] {successes} file(s) indexed, {total_chunks} total chunk(s). "
-            f"{failures} failure(s). Namespace '{namespace}' (tenant={tenant_id}, scope={scope_label})"
+    manifest_store: OrchidIngestionManifest | None = None
+    try:
+        manifest_store = await _manifest_context(
+            enabled=manifest,
+            manifest_dsn=manifest_dsn,
+            manifest_path=manifest_path,
         )
+
+        async with cli_context(config_path) as ctx:
+            writer = await _require_writer(ctx)
+            scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
+
+            total_chunks = 0
+            successes = 0
+            skipped = 0
+            failures = 0
+            present_sources: set[str] = set()
+
+            for f in files:
+                source_id = str(f.relative_to(dir_path))
+                present_sources.add(source_id)
+                try:
+                    file_bytes = f.read_bytes()
+                    content_hash = _compute_hash(file_bytes)
+
+                    if (
+                        manifest_store
+                        and await manifest_store.should_skip(source_id, content_hash, namespace)
+                        and not force
+                    ):
+                        skipped += 1
+                        console.print(f"  [dim]unchanged[/dim]  {f.relative_to(dir_path)}")
+                        continue
+
+                    ingestion = _build_ingestion(
+                        file_path=f,
+                        front_matter=front_matter,
+                        id_field=id_field,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                    )
+                    documents_out: list[OrchidDocument] = []
+                    count = await ingest_document(
+                        file_bytes=file_bytes,
+                        filename=f.name,
+                        scope=scope_obj,
+                        namespace=namespace,
+                        writer=writer,
+                        ingestion=ingestion,
+                        vision_model=vision_model,
+                        documents_out=documents_out,
+                    )
+
+                    if count > 0:
+                        successes += 1
+                        total_chunks += count
+                        console.print(f"  [green]{count} chunks[/green]  {f.relative_to(dir_path)}")
+                    else:
+                        console.print(f"  [yellow]0 chunks[/yellow]  {f.relative_to(dir_path)} (empty/unparseable)")
+
+                    if manifest_store:
+                        document_ids = [doc.id for doc in documents_out]
+                        await manifest_store.record(source_id, content_hash, namespace, document_ids)
+                except Exception as exc:
+                    failures += 1
+                    console.print(f"  [red]failed[/red]  {f.relative_to(dir_path)}: {exc}")
+
+            if manifest_store and prune:
+                pruned = await _prune_missing_sources(
+                    manifest=manifest_store,
+                    writer=writer,
+                    namespace=namespace,
+                    present_sources=present_sources,
+                )
+                if pruned:
+                    console.print(f"\n[yellow]Pruned[/yellow] {pruned} removed source(s) from '{namespace}'")
+
+            console.print(
+                f"\n[green]Done.[/green] {successes} file(s) indexed, {skipped} skipped, "
+                f"{total_chunks} total chunk(s), {failures} failure(s). "
+                f"Namespace '{namespace}' (tenant={tenant_id}, scope={scope_label})"
+            )
+    finally:
+        if manifest_store:
+            await manifest_store.close()
+
+
+async def _prune_missing_sources(
+    manifest: OrchidIngestionManifest,
+    writer: OrchidVectorWriter,
+    namespace: str,
+    present_sources: set[str],
+) -> int:
+    """Delete vectors and manifest rows for sources no longer present.
+
+    Returns the number of sources pruned.
+    """
+    known = await manifest.list_known(namespace)
+    missing = known - present_sources
+    for source_id in missing:
+        document_ids = await manifest.get_document_ids(source_id, namespace)
+        if document_ids:
+            await writer.delete(document_ids, namespace)
+        await manifest.remove(source_id, namespace)
+    return len(missing)
 
 
 # ── Command: text ───────────────────────────────────────────────
