@@ -11,6 +11,9 @@ import pytest
 from orchid_ai.core.repository import OrchidDocument, OrchidVectorWriter
 from orchid_ai.documents.strategies import FrontMatterIngestion, RecursiveIngestion
 from orchid_ai.persistence.sqlite_ingestion_manifest import OrchidSQLiteIngestionManifest
+from orchid_ai.rag.scopes import OrchidRAGScope, scope_key
+
+_SCOPE_KEY = scope_key(OrchidRAGScope(tenant_id="default"))
 
 
 class MockWriter(OrchidVectorWriter):
@@ -165,7 +168,7 @@ class TestIndexDir:
 
         manifest = OrchidSQLiteIngestionManifest(dsn=manifest_path)
         await manifest.init_db()
-        await manifest.record("a.md", "hash", "ns-1", ["doc-1"])
+        await manifest.record("a.md", "hash", "ns-1", ["doc-1"], scope=_SCOPE_KEY)
         await manifest.close()
 
         with (
@@ -204,7 +207,7 @@ class TestIndexDir:
 
         manifest = OrchidSQLiteIngestionManifest(dsn=manifest_path)
         await manifest.init_db()
-        await manifest.record("a.md", "hash", "ns-1", ["doc-1"])
+        await manifest.record("a.md", "hash", "ns-1", ["doc-1"], scope=_SCOPE_KEY)
         await manifest.close()
 
         with (
@@ -243,7 +246,7 @@ class TestIndexDir:
 
         manifest = OrchidSQLiteIngestionManifest(dsn=manifest_path)
         await manifest.init_db()
-        await manifest.record("old.md", "hash", "ns-1", ["doc-old-0"])
+        await manifest.record("old.md", "hash", "ns-1", ["doc-old-0"], scope=_SCOPE_KEY)
         await manifest.close()
 
         def fake_ingest(*args, documents_out=None, **kwargs):
@@ -285,7 +288,7 @@ class TestPruneMissingSources:
 
         manifest = AsyncMock()
         manifest.list_known = AsyncMock(return_value={"a.md", "b.md"})
-        manifest.get_document_ids = AsyncMock(side_effect=lambda s, n: [f"{s}-0"])
+        manifest.get_document_ids = AsyncMock(side_effect=lambda s, n, sc: [f"{s}-0"])
         manifest.remove = AsyncMock()
 
         writer = MockWriter()
@@ -293,9 +296,10 @@ class TestPruneMissingSources:
             manifest=manifest,
             writer=writer,
             namespace="ns-1",
+            scope=_SCOPE_KEY,
             present_sources={"a.md"},
         )
 
         assert count == 1
         assert writer.deleted == [(["b.md-0"], "ns-1")]
-        manifest.remove.assert_awaited_once_with("b.md", "ns-1")
+        manifest.remove.assert_awaited_once_with("b.md", "ns-1", _SCOPE_KEY)

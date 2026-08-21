@@ -11,6 +11,7 @@ clean shutdown.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -51,6 +52,27 @@ def _has_cli_rag_section(config_path: str) -> bool:
         return "cli_rag" in data and isinstance(data["cli_rag"], dict)
     except (FileNotFoundError, yaml.YAMLError):
         return False
+
+
+def _check_backend_available(backend: str, **kwargs) -> bool:
+    """Check if a vector backend is reachable/available.
+
+    Returns True if the backend can be used, False otherwise.
+    Currently only checks qdrant connectivity; chroma is always available.
+    """
+    if backend == "chroma":
+        return True
+    elif backend == "qdrant":
+        qdrant_url = kwargs.get("qdrant_url", "http://localhost:6333")
+        try:
+            import httpx
+
+            response = httpx.get(f"{qdrant_url}/collections", timeout=2.0)
+            return response.status_code == 200
+        except Exception:
+            return False
+    # Unknown backend — assume available and let it fail later if needed
+    return True
 
 
 def apply_cli_config(config_path: str) -> None:
@@ -126,12 +148,38 @@ async def bootstrap(
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    # Resolve CLI-specific defaults (Chroma first) and seed env vars so
-    # downstream code (including ``build_reader``) sees them.
-    resolved_backend = vector_backend or os.environ.get("VECTOR_BACKEND", DEFAULT_VECTOR_BACKEND)
+    # Resolve CLI-specific defaults and seed env vars so downstream code
+    # (including ``build_reader``) sees them.
+    #
+    # The CLI tries to use the infrastructure defined in orchid.yml.
+    # If the configured backend is unreachable, it falls back to chroma
+    # (zero-infrastructure local storage).
     resolved_chroma = chroma_path or os.environ.get("CHROMA_PATH", DEFAULT_CHROMA_PATH)
-    os.environ.setdefault("VECTOR_BACKEND", resolved_backend)
     os.environ.setdefault("CHROMA_PATH", resolved_chroma)
+
+    # Determine the desired vector backend from YAML/flags/env
+    desired_backend = vector_backend or os.environ.get("VECTOR_BACKEND", "")
+    if not desired_backend:
+        # Try to read from YAML
+        try:
+            raw = await asyncio.to_thread(Path(config_path).read_text, encoding="utf-8")
+            data = yaml.safe_load(raw) or {}
+            rag_config = data.get("rag", {})
+            if isinstance(rag_config, dict):
+                desired_backend = rag_config.get("vector_backend", "")
+        except (FileNotFoundError, yaml.YAMLError):
+            pass
+
+    # Check if the desired backend is available
+    if desired_backend and not _check_backend_available(
+        desired_backend, qdrant_url=qdrant_url or os.environ.get("QDRANT_URL", "http://localhost:6333")
+    ):
+        logger.warning("[CLI] Vector backend '%s' is unavailable — falling back to chroma", desired_backend)
+        desired_backend = "chroma"
+
+    # Set the final backend
+    if desired_backend:
+        os.environ["VECTOR_BACKEND"] = desired_backend
 
     # CLI convention: storage block in YAML does NOT override our SQLite
     # default.  Everything else in YAML → env propagates as usual.
@@ -152,7 +200,7 @@ async def bootstrap(
         apply_yaml=bool(config_path),
         skip_yaml_sections=skip_sections,
         model=model,
-        vector_backend=resolved_backend,
+        vector_backend=vector_backend,
         qdrant_url=qdrant_url,
         embedding_model=embedding_model,
         chat_storage_class=chat_storage_class,

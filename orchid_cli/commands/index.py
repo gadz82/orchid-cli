@@ -51,7 +51,7 @@ from orchid_ai.core.repository import Document, OrchidDocument, OrchidVectorWrit
 from orchid_ai.documents.chunker import ChunkConfig
 from orchid_ai.documents.pipeline import ingest_document
 from orchid_ai.documents.strategies import FrontMatterIngestion, RecursiveIngestion
-from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope
+from orchid_ai.rag.scopes import SHARED_TENANT, OrchidRAGScope, scope_key
 from rich.console import Console
 
 from .._typer_async import async_command
@@ -252,6 +252,7 @@ async def _index_file(
         async with cli_context(config_path) as ctx:
             writer = await _require_writer(ctx)
             scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
+            scope_k = scope_key(scope_obj)
             ingestion = _build_ingestion(
                 file_path=file_path,
                 front_matter=front_matter,
@@ -264,7 +265,11 @@ async def _index_file(
             file_bytes = file_path.read_bytes()
             content_hash = _compute_hash(file_bytes)
 
-            if manifest_store and await manifest_store.should_skip(source_id, content_hash, namespace) and not force:
+            if (
+                manifest_store
+                and await manifest_store.should_skip(source_id, content_hash, namespace, scope_k)
+                and not force
+            ):
                 console.print(f"[dim]Skipping unchanged file:[/dim] {file_path.name}")
                 return
 
@@ -291,7 +296,7 @@ async def _index_file(
 
             if manifest_store:
                 document_ids = [doc.id for doc in documents_out]
-                await manifest_store.record(source_id, content_hash, namespace, document_ids)
+                await manifest_store.record(source_id, content_hash, namespace, document_ids, scope_k)
     finally:
         if manifest_store:
             await manifest_store.close()
@@ -393,6 +398,7 @@ async def _index_dir(
         async with cli_context(config_path) as ctx:
             writer = await _require_writer(ctx)
             scope_obj = OrchidRAGScope(tenant_id=tenant_id, user_id=user, chat_id="", agent_id="")
+            scope_k = scope_key(scope_obj)
 
             total_chunks = 0
             successes = 0
@@ -409,7 +415,7 @@ async def _index_dir(
 
                     if (
                         manifest_store
-                        and await manifest_store.should_skip(source_id, content_hash, namespace)
+                        and await manifest_store.should_skip(source_id, content_hash, namespace, scope_k)
                         and not force
                     ):
                         skipped += 1
@@ -444,7 +450,7 @@ async def _index_dir(
 
                     if manifest_store:
                         document_ids = [doc.id for doc in documents_out]
-                        await manifest_store.record(source_id, content_hash, namespace, document_ids)
+                        await manifest_store.record(source_id, content_hash, namespace, document_ids, scope_k)
                 except Exception as exc:
                     failures += 1
                     console.print(f"  [red]failed[/red]  {f.relative_to(dir_path)}: {exc}")
@@ -454,6 +460,7 @@ async def _index_dir(
                     manifest=manifest_store,
                     writer=writer,
                     namespace=namespace,
+                    scope=scope_k,
                     present_sources=present_sources,
                 )
                 if pruned:
@@ -473,19 +480,20 @@ async def _prune_missing_sources(
     manifest: OrchidIngestionManifest,
     writer: OrchidVectorWriter,
     namespace: str,
+    scope: str,
     present_sources: set[str],
 ) -> int:
     """Delete vectors and manifest rows for sources no longer present.
 
     Returns the number of sources pruned.
     """
-    known = await manifest.list_known(namespace)
+    known = await manifest.list_known(namespace, scope)
     missing = known - present_sources
     for source_id in missing:
-        document_ids = await manifest.get_document_ids(source_id, namespace)
+        document_ids = await manifest.get_document_ids(source_id, namespace, scope)
         if document_ids:
             await writer.delete(document_ids, namespace)
-        await manifest.remove(source_id, namespace)
+        await manifest.remove(source_id, namespace, scope)
     return len(missing)
 
 
