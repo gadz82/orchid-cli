@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.12.0 (2026-09-15)
+
+### Bug Fixes
+
+- **cli**: Enhance vector-backend resolution and add bootstrap tests
+  ([`4e692bf`](https://github.com/gadz82/orchid-cli/commit/4e692bfdff213126aca2ee79cf9c76599f802c8f))
+
+### Features
+
+- **cli**: Enhance indexing commands with manifest-based idempotency and front-matter parsing
+  ([`36d70fd`](https://github.com/gadz82/orchid-cli/commit/36d70fda9e89748b1c586b9652cfa00cbf7eaa02))
+
+- **cli**: Improve scope handling and vector backend resolution
+  ([`918d4db`](https://github.com/gadz82/orchid-cli/commit/918d4db03450646f39598e7a658212400e2a8eaa))
+
+
 ## v1.11.0 (2026-08-03)
 
 ### Features
