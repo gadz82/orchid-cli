@@ -2,12 +2,30 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import os
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from orchid_ai.persistence.models import OrchidChatMessage, OrchidChatSession
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env():
+    """Snapshot and restore ``os.environ`` around every test.
+
+    ``bootstrap()`` / ``apply_cli_config()`` mutate ``os.environ``
+    directly (e.g. ``VECTOR_BACKEND``, ``CHROMA_PATH``, ``QDRANT_URL``).
+    Without this fixture those mutations leak into subsequent tests,
+    causing order-dependent failures.
+    """
+    original_env = dict(os.environ)
+    yield
+    for key in set(os.environ.keys()) - set(original_env.keys()):
+        del os.environ[key]
+    for key, value in original_env.items():
+        if os.environ.get(key) != value:
+            os.environ[key] = value
 
 
 @pytest.fixture
@@ -64,7 +82,7 @@ def mock_context(mock_graph, mock_reader, mock_chat_repo):
 
 @pytest.fixture
 def sample_sessions():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return [
         OrchidChatSession(
             id="aaa-111",
@@ -89,7 +107,7 @@ def sample_sessions():
 
 @pytest.fixture
 def sample_session():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return OrchidChatSession(
         id="aaa-111",
         tenant_id="cli",
@@ -103,7 +121,7 @@ def sample_session():
 
 @pytest.fixture
 def sample_messages():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return [
         OrchidChatMessage(id="m1", chat_id="aaa-111", role="user", content="Hello", agents_used=[], created_at=now),
         OrchidChatMessage(

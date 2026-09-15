@@ -11,6 +11,7 @@ clean shutdown.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -37,6 +38,16 @@ DEFAULT_VECTOR_BACKEND = "chroma"
 DEFAULT_CHROMA_PATH = "~/.orchid/chroma"
 
 
+def _load_yaml_dict(config_path: str) -> dict:
+    """Best-effort YAML load; returns ``{}`` when missing or invalid."""
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _has_cli_rag_section(config_path: str) -> bool:
     """Return True if the YAML config has a ``cli_rag:`` section.
 
@@ -45,12 +56,43 @@ def _has_cli_rag_section(config_path: str) -> bool:
     Docker-based examples (with ``rag.vector_backend: qdrant``) to
     run locally via the CLI without requiring Qdrant infrastructure.
     """
-    try:
-        with open(config_path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        return "cli_rag" in data and isinstance(data["cli_rag"], dict)
-    except (FileNotFoundError, yaml.YAMLError):
-        return False
+    return isinstance(_load_yaml_dict(config_path).get("cli_rag"), dict)
+
+
+def _yaml_vector_backend(config_path: str) -> str:
+    """Return the vector backend declared in ``orchid.yml``.
+
+    Honours the CLI's ``cli_rag:`` override — when that section is an
+    active dict it wins over ``rag:``, mirroring :func:`apply_cli_config`.
+    """
+    data = _load_yaml_dict(config_path)
+    section = "cli_rag" if isinstance(data.get("cli_rag"), dict) else "rag"
+    body = data.get(section)
+    if not isinstance(body, dict):
+        return ""
+    backend = body.get("vector_backend", "")
+    return backend.strip() if isinstance(backend, str) else ""
+
+
+def _check_backend_available(backend: str, **kwargs) -> bool:
+    """Check if a vector backend is reachable/available.
+
+    Returns True if the backend can be used, False otherwise.
+    Currently only checks qdrant connectivity; chroma is always available.
+    """
+    if backend == "chroma":
+        return True
+    elif backend == "qdrant":
+        qdrant_url = kwargs.get("qdrant_url", "http://localhost:6333")
+        try:
+            import httpx
+
+            response = httpx.get(f"{qdrant_url}/collections", timeout=2.0)
+            return response.status_code == 200
+        except Exception:
+            return False
+    # Unknown backend — assume available and let it fail later if needed
+    return True
 
 
 def apply_cli_config(config_path: str) -> None:
@@ -126,12 +168,30 @@ async def bootstrap(
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    # Resolve CLI-specific defaults (Chroma first) and seed env vars so
-    # downstream code (including ``build_reader``) sees them.
-    resolved_backend = vector_backend or os.environ.get("VECTOR_BACKEND", DEFAULT_VECTOR_BACKEND)
+    # Resolve CLI-specific defaults and seed env vars so downstream code
+    # (including ``build_reader``) sees them.
+    #
+    # Backend precedence: explicit flag → env var → orchid.yml
+    # (``cli_rag:`` wins over ``rag:``) → CLI default (chroma).
     resolved_chroma = chroma_path or os.environ.get("CHROMA_PATH", DEFAULT_CHROMA_PATH)
-    os.environ.setdefault("VECTOR_BACKEND", resolved_backend)
     os.environ.setdefault("CHROMA_PATH", resolved_chroma)
+
+    explicit_backend = vector_backend or os.environ.get("VECTOR_BACKEND", "")
+    yaml_backend = "" if explicit_backend else await asyncio.to_thread(_yaml_vector_backend, config_path)
+    resolved_backend = explicit_backend or yaml_backend or DEFAULT_VECTOR_BACKEND
+
+    # A backend declared only in orchid.yml may point at container-only
+    # infrastructure (e.g. http://qdrant:6333) that isn't reachable from
+    # a locally-run CLI — fall back to chroma in that case.  Explicit
+    # flag / env overrides always win over the probe.
+    if not explicit_backend and not _check_backend_available(
+        resolved_backend,
+        qdrant_url=qdrant_url or os.environ.get("QDRANT_URL", "http://localhost:6333"),
+    ):
+        logger.warning("[CLI] Vector backend '%s' is unavailable — falling back to chroma", resolved_backend)
+        resolved_backend = DEFAULT_VECTOR_BACKEND
+
+    os.environ["VECTOR_BACKEND"] = resolved_backend
 
     # CLI convention: storage block in YAML does NOT override our SQLite
     # default.  Everything else in YAML → env propagates as usual.
