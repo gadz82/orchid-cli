@@ -84,7 +84,7 @@ def _build_manifest(*, manifest_dsn: str, manifest_path: str) -> OrchidIngestion
 
         return OrchidPostgresIngestionManifest(dsn=dsn)
 
-    from orchid_ai.persistence.sqlite_ingestion_manifest import OrchidSQLiteIngestionManifest
+    from orchid_storage_sqlite.ingestion_manifest import OrchidSQLiteIngestionManifest
 
     return OrchidSQLiteIngestionManifest(dsn=dsn)
 

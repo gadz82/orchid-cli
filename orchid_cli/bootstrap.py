@@ -26,10 +26,16 @@ logger = logging.getLogger(__name__)
 
 
 # Public defaults — referenced by command modules (e.g. mcp, auth) that
-# want to honour the CLI's SQLite-first convention.
-DEFAULT_STORAGE_CLASS = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
+# want to honour the CLI's SQLite-first convention.  ``bootstrap()``
+# passes these through to the framework explicitly, because the
+# framework's own default is the in-memory backend.
+DEFAULT_STORAGE_CLASS = "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage"
 DEFAULT_STORAGE_DSN = "~/.orchid/chats.db"
-DEFAULT_TOKEN_STORE_CLASS = "orchid_ai.persistence.mcp_token_sqlite.OrchidSQLiteMCPTokenStore"
+DEFAULT_TOKEN_STORE_CLASS = "orchid_storage_sqlite.mcp_token_store.OrchidSQLiteMCPTokenStore"
+DEFAULT_REGISTRATION_STORE_CLASS = (
+    "orchid_storage_sqlite.mcp_client_registration_store.OrchidSQLiteMCPClientRegistrationStore"
+)
+DEFAULT_GATEWAY_STATE_STORE_CLASS = "orchid_storage_sqlite.mcp_gateway_state_store.OrchidSQLiteMCPGatewayStateStore"
 
 # ChromaDB defaults — zero-infrastructure RAG for the CLI via
 # orchid-rag-chroma plugin.  The plugin auto-registers ``"chroma"``
@@ -168,13 +174,15 @@ async def bootstrap(
     if cwd not in sys.path:
         sys.path.insert(0, cwd)
 
-    # Resolve CLI-specific defaults and seed env vars so downstream code
-    # (including ``build_reader``) sees them.
-    #
     # Backend precedence: explicit flag → env var → orchid.yml
     # (``cli_rag:`` wins over ``rag:``) → CLI default (chroma).
-    resolved_chroma = chroma_path or os.environ.get("CHROMA_PATH", DEFAULT_CHROMA_PATH)
-    os.environ.setdefault("CHROMA_PATH", resolved_chroma)
+    #
+    # ``~`` is expanded here (and again in ChromaRepository) because neither
+    # Python nor ChromaDB expands it — an unexpanded path silently creates a
+    # literal ``<cwd>/~/...`` directory.  The resolved value is written back
+    # (not ``setdefault``) so a pre-set env var is normalised too.
+    resolved_chroma = os.path.expanduser(chroma_path or os.environ.get("CHROMA_PATH", "") or DEFAULT_CHROMA_PATH)
+    os.environ["CHROMA_PATH"] = resolved_chroma
 
     explicit_backend = vector_backend or os.environ.get("VECTOR_BACKEND", "")
     yaml_backend = "" if explicit_backend else await asyncio.to_thread(_yaml_vector_backend, config_path)
@@ -197,6 +205,18 @@ async def bootstrap(
     # default.  Everything else in YAML → env propagates as usual.
     # When cli_rag: is present, rag: is also skipped so CLI-specific
     # RAG settings (chroma + local embeddings) win over API settings.
+    # The framework default is in-memory, so the CLI resolves its own
+    # durable SQLite defaults here (flag → env → CLI default).
+
+    resolved_storage_class = chat_storage_class or os.environ.get("CHAT_STORAGE_CLASS", "") or DEFAULT_STORAGE_CLASS
+    resolved_storage_dsn = chat_db_dsn or os.environ.get("CHAT_DB_DSN", "") or DEFAULT_STORAGE_DSN
+    resolved_token_store_class = os.environ.get("MCP_TOKEN_STORE_CLASS", "") or DEFAULT_TOKEN_STORE_CLASS
+    resolved_registration_store_class = (
+        os.environ.get("MCP_CLIENT_REGISTRATION_STORE_CLASS", "") or DEFAULT_REGISTRATION_STORE_CLASS
+    )
+    resolved_gateway_state_store_class = (
+        os.environ.get("MCP_GATEWAY_STATE_STORE_CLASS", "") or DEFAULT_GATEWAY_STATE_STORE_CLASS
+    )
 
     # Build content sources from --content-path CLI args
     content_sources = None
@@ -215,9 +235,15 @@ async def bootstrap(
         vector_backend=resolved_backend,
         qdrant_url=qdrant_url,
         embedding_model=embedding_model,
-        chat_storage_class=chat_storage_class,
-        chat_db_dsn=chat_db_dsn,
+        chat_storage_class=resolved_storage_class,
+        chat_db_dsn=resolved_storage_dsn,
         chat_extra_migrations_package=chat_extra_migrations_package,
+        mcp_token_store_class=resolved_token_store_class,
+        mcp_token_store_dsn=resolved_storage_dsn,
+        mcp_client_registration_store_class=resolved_registration_store_class,
+        mcp_client_registration_store_dsn=resolved_storage_dsn,
+        mcp_gateway_state_store_class=resolved_gateway_state_store_class,
+        mcp_gateway_state_store_dsn=resolved_storage_dsn,
         content_sources=content_sources,
     )
 

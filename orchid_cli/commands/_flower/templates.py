@@ -219,7 +219,7 @@ def _build_orchid_yml(answers: dict) -> str:
     elif storage_backend == "postgresql":
         storage_class = "orchid_storage_postgres.OrchidPostgresChatStorage"
     else:
-        storage_class = "orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage"
+        storage_class = "orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage"
 
     storage_dsn = answers.get("infrastructure.storage_dsn", "~/.orchid/chats.db")
     checkpointer = answers.get("infrastructure.checkpointer", "memory")
@@ -422,12 +422,12 @@ def _build_agents_yaml(answers: dict) -> str:
   enabled: true
 
   store:
-    class: orchid_ai.events.backends.sqlite.SQLiteEventStorage
+    class: orchid_storage_sqlite.event_storage.SQLiteEventStorage
     extra_args:
       dsn: ~/.orchid/chats.db
 
   queue:
-    class: orchid_ai.events.queues.sqlite.SQLiteSignalQueue
+    class: orchid_storage_sqlite.event_queue.SQLiteSignalQueue
     poll_interval_ms: 200
     lease_seconds: 30
     max_attempts: 3

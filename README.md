@@ -387,7 +387,7 @@ auth:
 rag:
   vector_backend: null      # no Qdrant needed for basic usage
 storage:
-  class: orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage
+  class: orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage
   dsn: ~/.orchid/chats.db
 
 # Startup hook (e.g. seeds RAG, registers custom strategies / tools)
@@ -408,7 +408,7 @@ checkpointer:
 | LLM model | `ollama/llama3.2` | `LITELLM_MODEL` |
 | Vector backend | `chroma` (via orchid-rag-chroma plugin) | `VECTOR_BACKEND` |
 | ChromaDB path | `~/.orchid/chroma` | `CHROMA_PATH` |
-| Storage class | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
+| Storage class | `orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
 | Checkpointer | disabled | `CHECKPOINTER_TYPE` / `CHECKPOINTER_DSN` |
 | Token storage | `~/.orchid/tokens.json` | — |
@@ -454,9 +454,8 @@ checkpointer:
 Install checkpointer extras as needed:
 
 ```bash
-pip install orchid-ai[checkpoint-sqlite]      # SQLite backend
-pip install orchid-ai[checkpoint-postgres]    # PostgreSQL backend
-pip install orchid-ai[all-checkpoints]        # Both
+pip install orchid-storage-sqlite      # SQLite backend
+pip install orchid-storage-postgres    # PostgreSQL backend
 ```
 
 ## Authentication
@@ -580,7 +579,7 @@ The CLI uses these primitives internally; embedded users get the same behaviour 
 ## Troubleshooting
 
 - **`Cannot resolve chat storage class '…'`** — the dotted import path in `storage.class` failed to import. Confirm the package is installed and the module path is reachable from `PYTHONPATH`.
-- **`No module named 'aiosqlite'`** — install the SQLite extra: `pip install orchid-ai[checkpoint-sqlite]`.
+- **`No module named 'aiosqlite'`** — install the default storage plugin: `pip install orchid-storage-sqlite`.
 - **OAuth `redirect_uri_mismatch`** — register `http://localhost:<port>/callback` (the port the CLI prints on `auth login`) with your IdP. Some IdPs accept the loopback wildcard `http://127.0.0.1`; others require the literal port.
 - **Tokens stored but `auth status` shows expired** — refresh failed. Inspect `~/.orchid/tokens.json` (chmod 600) and re-run `orchid auth login`.
 - **Slow startup with custom LLM provider** — `bootstrap.py` initialises the chat model lazily, but startup hooks run synchronously. Move heavy work behind `if reader and reader.supports_writes:` guards inside the hook.
