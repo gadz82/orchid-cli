@@ -40,7 +40,7 @@ dependencies = [
     # uses: ``[documents]`` is needed for ``orchid index`` (PDF /
     # DOCX / XLSX parsing); ``[events]`` is needed by the flower
     # templates that wire ``APSchedulerBackend``.
-    "orchid-ai[documents,events]>=2.0.0",
+    "orchid-ai[documents,events]>=1.11.0",
     # CLI default storage backend (durable SQLite at ~/.orchid/chats.db).
     "orchid-storage-sqlite>=1.0.0",
     "orchid-rag-chroma>=0.0.0",
