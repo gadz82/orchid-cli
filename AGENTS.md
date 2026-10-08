@@ -56,7 +56,7 @@ orchid-cli/
 
 3. **Commands receive an `Orchid` instance.** `bootstrap()` now returns the framework's mandatory :class:`orchid_ai.Orchid` facade directly — there is no CLI-local `OrchidContext` wrapper.  Commands read `orchid.graph`, `orchid.chat_repo`, `orchid.config`, `orchid.runtime` (and `orchid.runtime.default_model` for the old `ctx.model`, `orchid.runtime.get_reader()` for the old `ctx.reader`).
 
-4. **Default storage is SQLite** at `~/.orchid/chats.db` (no Docker, no PostgreSQL needed). Overridable via `CHAT_STORAGE_CLASS` and `CHAT_DB_DSN` env vars.
+4. **Default storage is durable SQLite** via `orchid-storage-sqlite` at `~/.orchid/chats.db` (no Docker, no PostgreSQL needed). `bootstrap()` passes the CLI's `DEFAULT_*_CLASS` values to the framework explicitly (the framework default is in-memory), honouring `CHAT_STORAGE_CLASS` / `CHAT_DB_DSN` / `MCP_*_STORE_CLASS` env vars over them.
 
 5. **No agent or framework code here.** No `OrchidAgent` subclasses, no graph wiring, no RAG logic. Those belong in `orchid/` or consumer projects.
 
@@ -160,7 +160,7 @@ Chat ID prefix matching is supported (type first few chars of UUID).
 | Chroma path | `~/.orchid/chroma` | `CHROMA_PATH` |
 | Qdrant URL | `http://qdrant:6333` | `QDRANT_URL` |
 | Embedding model | `text-embedding-3-small` | `EMBEDDING_MODEL` |
-| Storage class | `orchid_ai.persistence.sqlite.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
+| Storage class | `orchid_storage_sqlite.chat_storage.OrchidSQLiteChatStorage` | `CHAT_STORAGE_CLASS` |
 | Storage DSN | `~/.orchid/chats.db` | `CHAT_DB_DSN` |
 | cli_rag override | When `cli_rag:` exists in YAML, it replaces `rag:` for CLI only | — |
 

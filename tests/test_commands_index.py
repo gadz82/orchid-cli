@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from orchid_ai.core.repository import OrchidDocument, OrchidVectorWriter
 from orchid_ai.documents.strategies import FrontMatterIngestion, RecursiveIngestion
-from orchid_ai.persistence.sqlite_ingestion_manifest import OrchidSQLiteIngestionManifest
 from orchid_ai.rag.scopes import OrchidRAGScope, scope_key
+from orchid_storage_sqlite.ingestion_manifest import OrchidSQLiteIngestionManifest
 
 _SCOPE_KEY = scope_key(OrchidRAGScope(tenant_id="default"))
 

@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import tempfile
 
+import pytest
 import yaml
-
 from orchid_ai.config.yaml_env import YAML_TO_ENV
+
 from orchid_cli.bootstrap import _has_cli_rag_section, apply_cli_config
 
 
@@ -206,3 +207,83 @@ class TestHasCliRagSection:
             f.flush()
             assert _has_cli_rag_section(f.name) is True
         os.unlink(f.name)
+
+
+class TestBootstrapStorageDefaults:
+    """``bootstrap()`` must pass durable SQLite defaults to the framework.
+
+    Regression: after the SQLite extraction the framework default became
+    in-memory; ``bootstrap()`` previously delegated to it and silently
+    lost durability (CLI chats/config/MCP state did not survive restarts).
+    """
+
+    _ENV_VARS = (
+        "CHAT_STORAGE_CLASS",
+        "CHAT_DB_DSN",
+        "MCP_TOKEN_STORE_CLASS",
+        "MCP_CLIENT_REGISTRATION_STORE_CLASS",
+        "MCP_GATEWAY_STATE_STORE_CLASS",
+        "VECTOR_BACKEND",
+    )
+
+    @staticmethod
+    def _write_config(tmp_path) -> str:
+        config = tmp_path / "orchid.yml"
+        config.write_text("agents:\n  config_path: agents.yaml\n", encoding="utf-8")
+        return str(config)
+
+    @staticmethod
+    def _dummy_orchid():
+        from unittest.mock import AsyncMock, MagicMock
+
+        dummy = MagicMock()
+        dummy.warm_unauthenticated_capabilities = AsyncMock(return_value=MagicMock(warmed=0, skipped=0, failed=0))
+        dummy.runtime.default_model = "test-model"
+        dummy.config.agents = {}
+        return dummy
+
+    @pytest.mark.asyncio
+    async def test_passes_sqlite_defaults_when_unconfigured(self, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock, patch
+
+        from orchid_ai import Orchid
+
+        from orchid_cli import bootstrap as bootstrap_module
+
+        for var in self._ENV_VARS:
+            monkeypatch.delenv(var, raising=False)
+
+        dummy = self._dummy_orchid()
+        with patch.object(Orchid, "from_config_path", new=AsyncMock(return_value=dummy)) as from_cfg:
+            await bootstrap_module.bootstrap(self._write_config(tmp_path))
+
+        kwargs = from_cfg.call_args.kwargs
+        assert kwargs["chat_storage_class"] == bootstrap_module.DEFAULT_STORAGE_CLASS
+        assert kwargs["chat_db_dsn"] == bootstrap_module.DEFAULT_STORAGE_DSN
+        assert kwargs["mcp_token_store_class"] == bootstrap_module.DEFAULT_TOKEN_STORE_CLASS
+        assert kwargs["mcp_client_registration_store_class"] == bootstrap_module.DEFAULT_REGISTRATION_STORE_CLASS
+        assert kwargs["mcp_gateway_state_store_class"] == bootstrap_module.DEFAULT_GATEWAY_STATE_STORE_CLASS
+        assert kwargs["mcp_token_store_dsn"] == bootstrap_module.DEFAULT_STORAGE_DSN
+
+    @pytest.mark.asyncio
+    async def test_env_overrides_storage_defaults(self, monkeypatch, tmp_path):
+        from unittest.mock import AsyncMock, patch
+
+        from orchid_ai import Orchid
+
+        from orchid_cli import bootstrap as bootstrap_module
+
+        for var in self._ENV_VARS:
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("CHAT_STORAGE_CLASS", "custom_pkg.storage.ChatStorage")
+        monkeypatch.setenv("MCP_TOKEN_STORE_CLASS", "custom_pkg.storage.TokenStore")
+
+        dummy = self._dummy_orchid()
+        with patch.object(Orchid, "from_config_path", new=AsyncMock(return_value=dummy)) as from_cfg:
+            await bootstrap_module.bootstrap(self._write_config(tmp_path))
+
+        kwargs = from_cfg.call_args.kwargs
+        assert kwargs["chat_storage_class"] == "custom_pkg.storage.ChatStorage"
+        assert kwargs["mcp_token_store_class"] == "custom_pkg.storage.TokenStore"
+        # Unset keys still get the CLI defaults.
+        assert kwargs["mcp_gateway_state_store_class"] == bootstrap_module.DEFAULT_GATEWAY_STATE_STORE_CLASS

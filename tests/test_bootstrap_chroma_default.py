@@ -28,7 +28,7 @@ class TestBootstrapChromaDefault:
             await bootstrap("/fake/config.yml")
 
             assert os.environ.get("VECTOR_BACKEND") == DEFAULT_VECTOR_BACKEND
-            assert os.environ.get("CHROMA_PATH") == DEFAULT_CHROMA_PATH
+            assert os.environ.get("CHROMA_PATH") == os.path.expanduser(DEFAULT_CHROMA_PATH)
             mock_from_config.assert_awaited_once()
             _, kwargs = mock_from_config.call_args
             assert kwargs["vector_backend"] == DEFAULT_VECTOR_BACKEND
@@ -69,3 +69,23 @@ class TestBootstrapChromaDefault:
 
         os.environ.pop("VECTOR_BACKEND", None)
         os.environ.pop("CHROMA_PATH", None)
+
+    async def test_env_chroma_path_tilde_is_expanded(self, monkeypatch):
+        """Regression: a ``~`` in CHROMA_PATH must not reach ChromaDB literally
+        (it would create a ``<cwd>/~/...`` directory)."""
+        monkeypatch.setenv("CHROMA_PATH", "~/env/chroma")
+
+        with patch("orchid_cli.bootstrap.Orchid.from_config_path", new_callable=AsyncMock) as mock_from_config:
+            mock_from_config.return_value = _make_mock_orchid()
+            await bootstrap("/fake/config.yml")
+
+        assert os.environ["CHROMA_PATH"] == os.path.expanduser("~/env/chroma")
+
+    async def test_explicit_flag_wins_over_env_and_expands(self, monkeypatch):
+        monkeypatch.setenv("CHROMA_PATH", "/env/chroma")
+
+        with patch("orchid_cli.bootstrap.Orchid.from_config_path", new_callable=AsyncMock) as mock_from_config:
+            mock_from_config.return_value = _make_mock_orchid()
+            await bootstrap("/fake/config.yml", chroma_path="~/flag/chroma")
+
+        assert os.environ["CHROMA_PATH"] == os.path.expanduser("~/flag/chroma")
