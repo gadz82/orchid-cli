@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.13.0 (2026-10-08)
+
+### Features
+
+- Orchid storage sqlite extraced from the core
+  ([`0d4b5fe`](https://github.com/gadz82/orchid-cli/commit/0d4b5fe9869877f2c000c0a9bf4590c6dfcce30e))
+
+- Orchid version update
+  ([`50c5cbd`](https://github.com/gadz82/orchid-cli/commit/50c5cbd7ab87b01a0dcb6251b98d19fa45f0a5ac))
+
+
 ## v1.12.0 (2026-09-15)
 
 ### Bug Fixes
