@@ -41,6 +41,7 @@ from .slash_commands import load_slash_command_plugins
 
 logger = logging.getLogger(__name__)
 
+# ORCHID-MEM: 01a1a0c1-dbde-7b3a-8a7b-e07e7f596527 — Typer root and command registration
 app = typer.Typer(
     name="orchid",
     help="Orchid — multi-agent AI framework CLI",
