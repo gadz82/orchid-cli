@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-11-16)
+
+### Bug Fixes
+
+- **ci**: Make release workflow idempotent
+  ([`26f41e3`](https://github.com/gadz82/orchid-cli/commit/26f41e3af708c477d2277cb2067556115ef8aa6a))
+
+### Chores
+
+- **deps**: Require orchid-ai >=1.12.0
+  ([`5f9481e`](https://github.com/gadz82/orchid-cli/commit/5f9481e823cdc912a2fff2968542172aeedbe733))
+
+- **orchid-sdd**: Migrate workspace knowledge and memory [skip ci]
+  ([`1593f25`](https://github.com/gadz82/orchid-cli/commit/1593f2570e936a4b45a5693ae9fb53ab86159fa5))
+
+### Testing
+
+- **decision**: Verify the CLI config loader accepts decision providers (P-007)
+  ([`650784d`](https://github.com/gadz82/orchid-cli/commit/650784d5d5d56b1bf8ca22f85cd113bae8399e7c))
+
+
 ## v1.13.0 (2026-10-08)
 
 ### Features
