@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.14.0 (2026-11-20)
+
+### Chores
+
+- **deps**: Require orchid-ai>=1.13.0
+  ([`4d32c91`](https://github.com/gadz82/orchid-cli/commit/4d32c91264ee1b12a0ecd5bff6c0734eeeb62c86))
+
+### Features
+
+- Add pipeline list/show/validate/run commands
+  ([`a130792`](https://github.com/gadz82/orchid-cli/commit/a130792320a408fa0034b50f4de1916adb3d636f))
+
+
 ## v1.13.1 (2026-11-16)
 
 ### Bug Fixes
