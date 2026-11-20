@@ -33,6 +33,7 @@ from .commands import (
     index,
     jobs,
     mcp,
+    pipeline,
     runs,
     schedules,
     signals,
@@ -61,6 +62,8 @@ app.add_typer(signals.app, name="signals")
 app.add_typer(jobs.app, name="jobs")
 app.add_typer(runs.app, name="runs")
 app.add_typer(schedules.app, name="schedules")
+# Data pipelines (direct + Bloom).
+app.add_typer(pipeline.app, name="pipeline")
 
 
 # ── Plugin discovery ───────────────────────────────────────────

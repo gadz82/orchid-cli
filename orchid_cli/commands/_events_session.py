@@ -64,12 +64,16 @@ async def resolve_events_session(
             "to use the signals/jobs/runs/schedules commands"
         )
 
+    pipeline_registry = orchid.pipelines
+    known_pipelines = set(pipeline_registry.names()) if pipeline_registry is not None else set()
     events = await start_events(
         events_config=orchid.config.events,
         chat_storage=orchid.chat_repo,
         identity_resolver=None,  # CLI doesn't resolve users
         session_warmer=orchid.session_warmer,
         known_agents=set(orchid.config.agents.keys()),
+        known_pipelines=known_pipelines,
+        pipeline_runner=_CLIPipelineRunner(orchid) if pipeline_registry is not None else None,
     )
     if not start_producers:
         # Stop any producers ``start_events`` already started — short-
@@ -87,6 +91,41 @@ async def resolve_events_session(
         events.producers = []
         events.http_producer = None
     return orchid, events
+
+
+# ORCHID-MEM: 01a1f448-411d-7a7d-94d9-cd298dd79ac0 — CLI Bloom adapter; passes the facade to the events pipeline runner and keeps Bloom chat scope.
+class _CLIPipelineRunner:
+    """Bloom adapter over the CLI's Orchid facade.
+
+    ``start_events`` calls ``run(name, input, mode="bloom", ...)``; the facade
+    accepts ``direct``/``chat``. Bloom runs map to ``chat`` so a bound chat keeps
+    its scope and interpretation policy.
+    """
+
+    def __init__(self, orchid: Any) -> None:
+        self._orchid = orchid
+
+    async def run(
+        self,
+        name: str,
+        input: dict[str, Any],
+        *,
+        auth: Any,
+        mode: str = "bloom",
+        correlation_id: str | None = None,
+        chat_id: str | None = None,
+        include_graph: bool = False,
+    ) -> Any:
+        facade_mode = "chat" if mode in ("bloom", "chat") else "direct"
+        return await self._orchid.run_pipeline(
+            name,
+            input,
+            auth=auth,
+            chat_id=chat_id,
+            correlation_id=correlation_id,
+            mode=facade_mode,
+            include_graph=include_graph,
+        )
 
 
 @asynccontextmanager
