@@ -25,6 +25,7 @@ orchid-cli/
       auth.py        login, logout, status subcommands
       chat.py        Full CRUD: create, list, delete, history, send, interactive, rename, share
       config.py      validate command (checks agents.yaml)
+      pipeline.py    list / show / validate / run typed data pipelines
       external_agents.py  list configured external-agent CLI tools
       index.py       file/dir/text/json-file commands (RAG ingestion)
       mcp.py         MCP OAuth: status, revoke per-server tokens
@@ -68,7 +69,9 @@ orchid-cli/
 
 9. **Commands go through `commands/_session.py:resolve_session`.** Every command that needs both an `Orchid` instance and a per-user `OrchidAuthContext` calls `resolve_session(config_path)` (or its `session_context` async-context-manager wrapper), which bootstraps the framework, resolves auth, and warms `passthrough` / `oauth` MCP capability caches once per `(tenant_key, user_id)`. The interactive REPL stays alive across many turns; the warmer's idempotency check makes subsequent loop iterations a no-op. Failures in the per-user warm are logged and ignored — the chat still works, it just pays the lazy discovery cost on first tool call. `bootstrap()` itself warms `auth.mode: none` servers up front (no user identity needed).
 
-10. **`external_agents:` in agents.yaml** — the `agents.yaml` file may include an ``external_agents:`` block declaring external CLI delegation tools. These are registered into ``TOOL_REGISTRY`` at graph build and referenced by name in ``agent.tools:`` like any built-in tool. The ``orchid external-agents list`` command displays them; the chat commands surface ``requires_approval`` HITL prompts before every delegation.
+10. **Pipeline commands keep read-only work offline.** `pipeline list/show/validate` load the config and registry with no runtime bootstrap, auth, MCP warm-up, model or network call. `pipeline run` uses the normal facade bootstrap and per-user MCP warm-up. Machine output uses `typer.echo`; verbose job events go to stderr. Exit codes: 0 success, 1 internal, 2 validation/config, 3 failed/partial, 4 timeout, 5 not found/disabled. Pipeline runs never create a chat row.
+
+11. **`external_agents:` in agents.yaml** — the `agents.yaml` file may include an ``external_agents:`` block declaring external CLI delegation tools. These are registered into ``TOOL_REGISTRY`` at graph build and referenced by name in ``agent.tools:`` like any built-in tool. The ``orchid external-agents list`` command displays them; the chat commands surface ``requires_approval`` HITL prompts before every delegation.
 
 ## Commands
 
@@ -119,6 +122,21 @@ orchid schedules show <schedule_id> -c <orchid.yml>
 orchid schedules disable <schedule_id> -c <orchid.yml>
 orchid schedules enable <schedule_id> -c <orchid.yml>
 ```
+
+### Data pipelines
+
+```bash
+orchid pipeline list -c orchid.yml
+orchid pipeline show customer_health -c orchid.yml
+orchid pipeline validate customer_health -c orchid.yml --input-json '{"customer_id":"C-100"}'
+orchid pipeline run customer_health -c orchid.yml --input-json '{"customer_id":"C-100"}' --output json
+orchid pipeline run customer_health -c orchid.yml --input file.json --include-graph --graph-out graph.json
+```
+
+`list`, `show` and `validate` are offline. `run` uses the normal facade
+bootstrap and supports `--output pretty|json|yaml`, `--include-graph`,
+`--graph-out`, `--timeout`, `--quiet` and `--verbose`. Tests:
+`tests/test_pipeline_commands.py`.
 
 ### Pollen + Bloom local-mode notes
 
@@ -228,3 +246,6 @@ Requires Ollama running on host with models: `llama3.2`, `nomic-embed-text`.
 - Embedding dimension mismatch (768 vs 1536 vs 3072) causes silent retrieval failures. Switching models requires re-indexing Qdrant.
 - Running `orchid chat` against a config with OAuth-protected MCP servers without `orchid auth login` first — the CLI falls back to the dev token, and MCP servers return 401. Always run `orchid auth login -c <config>` first.
 - Token file permissions — `~/.orchid/tokens.json` should be `0o600` (owner-only). The CLI sets this automatically, but manual edits or copies may loosen permissions.
+- `orchid pipeline validate` must not bootstrap the runtime or call a model/MCP server; it is a config-only path shared with `list` and `show`.
+- `--graph-out` retrieves the graph but does not embed it in stdout unless `--include-graph` is explicit; a capped graph exits 3.
+- Machine output must stay Rich-free (`typer.echo`), or JSON/YAML gets wrapped/markup-parsed.

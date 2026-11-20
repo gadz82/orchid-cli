@@ -14,6 +14,7 @@ Provides terminal access to all chat operations, configuration validation, RAG i
 - **Identical config surface** — point at any `orchid.yml` / `agents.yaml` pair (basketball, restaurant, helpdesk, your own) and the CLI behaves the way orchid-api does, minus the HTTP layer.
 - **Zero-infrastructure RAG** — defaults to ChromaDB (via `orchid-rag-chroma` plugin) for on-disk vector storage. Add Qdrant / Neo4j only when you need them.
 - **No infrastructure required** — defaults to SQLite chat storage. Add Postgres via `orchid-storage-postgres` only when you need it.
+- **Typed data pipelines** — list, inspect, validate and run YAML-defined DAGs with JSON/YAML/stdin input, machine-readable output and documented exit codes. Read-only commands are offline; no chat row is created.
 - **Plugin extensible** — register custom subcommands via Python entry points without forking.
 
 ## Installation
@@ -145,6 +146,22 @@ Slash commands available inside interactive mode:
 | `/history` | Show last 20 messages |
 | `/rename <title>` | Rename current chat |
 | `/quit` | Exit interactive mode |
+
+### Data pipelines
+
+| Command | Purpose |
+|---------|---------|
+| `orchid pipeline list -c orchid.yml` | List configured pipelines (offline) |
+| `orchid pipeline show <name> -c orchid.yml` | Show jobs, schemas and exposure flags (offline) |
+| `orchid pipeline validate <name> -c orchid.yml --input-json '{"customer_id":"C-100"}'` | Validate input without running (offline) |
+| `orchid pipeline run <name> -c orchid.yml --input-json '{"customer_id":"C-100"}'` | Run the pipeline through the facade |
+| `orchid pipeline run <name> -c orchid.yml --input file.json --output json --include-graph` | Machine output and opt-in graph snapshot |
+
+`list`, `show` and `validate` only load the configuration and compile the registry — they do not start models, MCP servers or tools. `run` uses the normal facade bootstrap and per-user MCP warm-up. Machine output goes to stdout; verbose events go to stderr.
+
+Exit codes: `0` success, `1` internal error, `2` validation, `3` failed/partial, `4` timeout, `5` not found/disabled. Pipeline runs never create a chat row.
+
+See the [pipeline guide](https://github.com/gadz82/orchid/blob/main/docs/pipelines.md) for the YAML, shapes, job kinds and result contract.
 
 ### Configuration
 
